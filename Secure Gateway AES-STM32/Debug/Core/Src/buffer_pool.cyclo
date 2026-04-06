@@ -1,0 +1,3 @@
+../Core/Src/buffer_pool.c:13:6:BufferPool_Init	2
+../Core/Src/buffer_pool.c:25:15:BufferPool_Acquire	4
+../Core/Src/buffer_pool.c:44:6:BufferPool_Release	4

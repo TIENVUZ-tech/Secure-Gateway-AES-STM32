@@ -1,0 +1,12 @@
+../Core/Src/enc28j60_driver.c:11:9:ENC28J60_ReadOp	24	static
+../Core/Src/enc28j60_driver.c:28:6:ENC28J60_WriteOp	24	static
+../Core/Src/enc28j60_driver.c:37:6:ENC28J60_SetBank	24	static
+../Core/Src/enc28j60_driver.c:47:9:ENC28J60_ReadReg	16	static
+../Core/Src/enc28j60_driver.c:52:6:ENC28J60_WriteReg	16	static
+../Core/Src/enc28j60_driver.c:57:6:ENC28J60_WritePhy	16	static
+../Core/Src/enc28j60_driver.c:64:10:ENC28J60_ReadPhy	24	static
+../Core/Src/enc28j60_driver.c:76:9:ENC28J60_GetRevision	24	static
+../Core/Src/enc28j60_driver.c:81:9:ENC28J60_LinkUp	16	static
+../Core/Src/enc28j60_driver.c:85:6:ENC28J60_Init	24	static
+../Core/Src/enc28j60_driver.c:160:6:ENC28J60_SendPacket	32	static
+../Core/Src/enc28j60_driver.c:208:10:ENC28J60_ReceivePacket	40	static
