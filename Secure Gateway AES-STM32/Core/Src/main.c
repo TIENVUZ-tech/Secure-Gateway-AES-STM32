@@ -126,6 +126,7 @@ void vHeartbeat_TaskFunc(void const * argument);
 /* USER CODE BEGIN PFP */
 void RX_HandlePacket(ENC28J60_Config *spi, uint8_t source_spi);
 void Update_Ip_Checksum(PacketBuffer *packet, uint8_t ip_header_length);
+void User_Init(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -198,6 +199,17 @@ void Update_Ip_Checksum(PacketBuffer *packet, uint8_t ip_header_length) {
 	  packet->data[25] = final_checksum & 0xFF;
 
   }
+
+void User_Init() {
+	// Initialize ENC28J60 1 and 2
+	ENC28J60_Init(&spi1, mac1_addr);
+	HAL_IWDG_Refresh(&hiwdg);
+
+	ENC28J60_Init(&spi2, mac2_addr);
+	HAL_IWDG_Refresh(&hiwdg);
+
+	BufferPool_Init();
+}
 /* USER CODE END 0 */
 
 /**
@@ -217,14 +229,7 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-    // Initialize ENC28J60 1 and 2
-    ENC28J60_Init(&spi1, mac1_addr);
-    HAL_IWDG_Refresh(&hiwdg);
 
-    ENC28J60_Init(&spi2, mac2_addr);
-    HAL_IWDG_Refresh(&hiwdg);
-
-    BufferPool_Init();
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -326,6 +331,7 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  User_Init();
 
   while (1)
   {
