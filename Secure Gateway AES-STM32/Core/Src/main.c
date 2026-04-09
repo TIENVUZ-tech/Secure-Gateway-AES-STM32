@@ -82,7 +82,7 @@ osThreadId vTX_TaskHandle;
 uint32_t vTX_TaskBuffer[ 256 ];
 osStaticThreadDef_t vTX_TaskControlBlock;
 osThreadId vPacket_Processing_TaskHandle;
-uint32_t vPacket_Processing_TaskBuffer[ 256 ];
+uint32_t vPacket_Processing_TaskBuffer[ 512 ];
 osStaticThreadDef_t vPacket_Processing_TaskControlBlock;
 osThreadId vHearbeat_TaskHandle;
 uint32_t vHearbeat_TaskBuffer[ 128 ];
@@ -613,7 +613,7 @@ void vRX_SPI1_TaskFunc(void const * argument)
 	  taskEXIT_CRITICAL();
 
 	  // Wait for interrupt signal from the ENC28J60 1
-	  osSemaphoreWait(xSem_INT_SPI1, 100);
+	  osSemaphoreWait(xSem_INT_SPI1, 50);
 
 	  /* There may be multiple packets in the ENC28J60 buffer -> Read maximum 3 packets before waiting for the next interrupt
 	   * Because the ENC28J60 only sends an interrupt even if there are many packets
@@ -645,7 +645,7 @@ void vRX_SPI2_TaskFunc(void const * argument)
 	  task_alive_flags |= TASK_ALIVE_RX2;
 	  taskEXIT_CRITICAL();
 
-	  osSemaphoreWait(xSem_INT_SPI2, 100);
+	  osSemaphoreWait(xSem_INT_SPI2, 50);
 
 	  uint8_t rx_count = 0;
 	  while ((ENC28J60_ReadRegGlo(&spi2, EPKTCNT) > 0) && rx_count < 3) {
@@ -676,7 +676,7 @@ void vTX_TaskFunc(void const * argument)
 	  task_alive_flags |= TASK_ALIVE_TX;
 	  taskEXIT_CRITICAL();
 
-	  event = osMessageGet(xTX_QueueHandle, 100);
+	  event = osMessageGet(xTX_QueueHandle, 50);
 	  if (event.status == osEventMessage) {
 		  packet = (PacketBuffer*)event.value.p;
 
@@ -712,7 +712,7 @@ void vPacket_Processing_TaskFunc(void const * argument)
 	  task_alive_flags |= TASK_ALIVE_AES;
 	  taskEXIT_CRITICAL();
 
-	  event = osMessageGet(xRX_QueueHandle, 100);
+	  event = osMessageGet(xRX_QueueHandle, 50);
 	  if (event.status == osEventMessage) {
 		  packet = (PacketBuffer*)event.value.p;
 
@@ -734,14 +734,21 @@ void vPacket_Processing_TaskFunc(void const * argument)
 		      continue;
 		  }
 
-		  /* Check condition
-		   * IPv4 (0x0800)
-		   * UDP (0x11)
-		   * Non-fragmented (flag_offset & 0x3FFF = 0)
-		   */
-		  if (ethernet_type != 0x0800 || ip_protocol != 0x11 || (flag_offset & 0x3FFF) != 0) {
-			  BufferPool_Release(packet);
-			  continue;
+		  // IPv4 packet
+		  if (ethernet_type == 0x0800) {
+			  // Accept ICMP packets (ping)
+			  if (ip_protocol == 0x01) {
+				  if (osMessagePut(xTX_QueueHandle, (uint32_t)packet, 10) != osOK) {
+					  BufferPool_Release(packet);
+				  }
+				  continue;
+			  }
+
+			  // Remove packet if it is not a UDP packet or fragment
+			  if (ip_protocol != 0x11 || (flag_offset & 0x3FFF) != 0) {
+				  BufferPool_Release(packet);
+				  continue;
+			  }
 		  }
 
 		  // Read IHL (Internet Header Length)

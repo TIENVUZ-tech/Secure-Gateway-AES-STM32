@@ -2,3 +2,4 @@
 ../Core/Src/freertos.c:84:6:HAL_GPIO_EXTI_Callback	4
 ../Core/Src/freertos.c:100:6:HAL_SPI_RxCpltCallback	4
 ../Core/Src/freertos.c:113:6:HAL_SPI_TxCpltCallback	4
+../Core/Src/freertos.c:126:6:HAL_SPI_ErrorCallback	4

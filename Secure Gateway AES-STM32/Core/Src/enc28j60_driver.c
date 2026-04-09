@@ -53,7 +53,7 @@ static uint8_t ENC28J60_ReadReg(ENC28J60_Config *spi, uint8_t address) {
 }
 
 uint8_t ENC28J60_ReadRegGlo(ENC28J60_Config *spi, uint8_t address) {
-	spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 100) : osMutexWait(spi2_mutex, 100);
+	spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 50) : osMutexWait(spi2_mutex, 50);
 	uint8_t data = ENC28J60_ReadReg(spi, address);
 	spi->hspi->Instance == SPI1 ? osMutexRelease(spi1_mutex) : osMutexRelease(spi2_mutex);
 	return data;
@@ -109,7 +109,7 @@ void ENC28J60_Init(ENC28J60_Config *spi, uint8_t *mac_address) {
     // Wait for oscillator
     uint32_t t0 = HAL_GetTick();
     while (!(ENC28J60_ReadOp(spi, ENC28J60_READ_CTRL_REG, ESTAT) & ESTAT_CLKRDY)) {
-        if (HAL_GetTick() - t0 > 500) return;  // timeout 500ms
+        if (HAL_GetTick() - t0 > 20) return;  // timeout 20ms
     }
 
     // Initialize RX
@@ -167,7 +167,7 @@ void ENC28J60_Init(ENC28J60_Config *spi, uint8_t *mac_address) {
 }
 
 void ENC28J60_SendPacket(ENC28J60_Config *spi, uint8_t *packet_data, uint16_t length) {
-	spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 100) : osMutexWait(spi2_mutex, 100);
+	spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 200) : osMutexWait(spi2_mutex, 200);
 
     // Wait for the previous transmission to complete
     uint32_t t0 = HAL_GetTick();
@@ -228,7 +228,7 @@ void ENC28J60_SendPacket(ENC28J60_Config *spi, uint8_t *packet_data, uint16_t le
 }
 
 uint16_t ENC28J60_ReceivePacket(ENC28J60_Config *spi, uint8_t *pBuffer, uint16_t max_length) {
-	spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 100) : osMutexWait(spi2_mutex, 100);
+	spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 200) : osMutexWait(spi2_mutex, 200);
 
 	// Don't have any packet
     if (ENC28J60_ReadReg(spi, EPKTCNT) == 0) {
