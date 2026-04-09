@@ -20,11 +20,12 @@ print(f"Sending: '{message}' (Length: {len(message)} bytes)")
 
 # Send
 number = 0
+
 while(number < 1000):
     sock.sendto(message.encode('utf-8'), (TARGET_IP_RASP, TARGET_PORT))
     number += 1
     if number % 100 == 0:
         print(f"Sent {number}/1000 packets")
-    time.sleep(0.01)
+    time.sleep(0.05)
 
 print("Completed")

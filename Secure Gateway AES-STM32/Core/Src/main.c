@@ -39,8 +39,6 @@ typedef struct {
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define RX_BUFFER_SIZE 598
-
 const IP_Key_Map key_table[] = {
 		{{192, 168, 1, 10}, {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F}},
 		{{192, 168, 1, 20}, {0x00, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xA0, 0xB0, 0xC0, 0xD0, 0xE0, 0xF0}}
@@ -73,8 +71,6 @@ DMA_HandleTypeDef hdma_spi1_tx;
 DMA_HandleTypeDef hdma_spi2_rx;
 DMA_HandleTypeDef hdma_spi2_tx;
 
-volatile uint8_t task_alive_flags = 0;
-
 osThreadId defaultTaskHandle;
 osThreadId vRX_SPI1_TaskHandle;
 uint32_t vRX_SPI1_TaskBuffer[ 256 ];
@@ -98,15 +94,19 @@ osMessageQId xTX_QueueHandle;
 uint8_t xTX_QueueBuffer[ 4 * sizeof( uint32_t ) ];
 osStaticMessageQDef_t xTX_QueueControlBlock;
 /* USER CODE BEGIN PV */
+// Semaphore
 osSemaphoreId xSem_DMA_SPI1_Done;
 osSemaphoreId xSem_DMA_SPI2_Done;
 osSemaphoreId xSem_INT_SPI1;
 osSemaphoreId xSem_INT_SPI2;
 
-osSemaphoreDef(sem_DMA_SPI1_Done);
-osSemaphoreDef(sem_DMA_SPI2_Done);
-osSemaphoreDef(sem_INT_SPI1);
-osSemaphoreDef(sem_INT_SPI2);
+// Mutex
+osMutexId spi1_mutex;
+osMutexId spi2_mutex;
+osMutexId pool_mutex;
+
+// Alive flag
+volatile uint8_t task_alive_flags = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -133,26 +133,21 @@ void Update_Ip_Checksum(PacketBuffer *packet, uint8_t ip_header_length);
 extern ENC28J60_Config spi1;
 extern ENC28J60_Config spi2;
 
-extern osSemaphoreId xSem_INT_SPI1;
-extern osSemaphoreId xSem_INT_SPI2;
-extern osSemaphoreId xSem_DMA_SPI1_Done;
-extern osSemaphoreId xSem_DMA_SPI2_Done;
-
 extern IWDG_HandleTypeDef hiwdg;
 
 // Local MAC address
 uint8_t mac1_addr[6] = {0x02, 0x00, 0x00, 0x00, 0x00, 0x01};
 uint8_t mac2_addr[6] = {0x02, 0x00, 0x00, 0x00, 0x00, 0x02};
 
-uint8_t link_down_count_spi1;
-uint8_t link_down_count_spi2;
+uint8_t link_down_count_spi1 = 0;
+uint8_t link_down_count_spi2 = 0;
 
 void RX_HandlePacket(ENC28J60_Config *spi, uint8_t source_spi) {
 	// Request buffer from pool (if the pool is full, skip packet)
 	PacketBuffer *buffer = BufferPool_Acquire();
 	if (buffer == NULL) {
 		// Read and discard packet from the chip
-		uint8_t packet[BUFFER_SIZE];
+		static uint8_t packet[BUFFER_SIZE];
 		ENC28J60_ReceivePacket(spi, packet, BUFFER_SIZE);
 		return;
 	}
@@ -161,13 +156,13 @@ void RX_HandlePacket(ENC28J60_Config *spi, uint8_t source_spi) {
 	uint16_t length = ENC28J60_ReceivePacket(spi, buffer->data, BUFFER_SIZE);
 
 	// Check the length of packet
-	if (length == 0) {
+	if (length <= 4) {
 		BufferPool_Release(buffer);
 		return;
 	}
 
 	// Write metadata into buffer
-	buffer->length = length;
+	buffer->length = length - 4; // Remove CRC bits
 	buffer->source_spi = source_spi;
 
 	// Place the buffer pointer into xRX_Queue
@@ -179,7 +174,7 @@ void RX_HandlePacket(ENC28J60_Config *spi, uint8_t source_spi) {
 
 void Update_Ip_Checksum(PacketBuffer *packet, uint8_t ip_header_length) {
 	  // Update the new total length into the header (offset 16-17)
-	  uint16_t total_length = packet->length - 14; // skip Ethernet header
+	  uint16_t total_length = packet->length - 14; // Skip Ethernet header
 	  packet->data[16] = (total_length >> 8) & 0xFF;
 	  packet->data[17] = total_length & 0xFF;
 
@@ -199,7 +194,7 @@ void Update_Ip_Checksum(PacketBuffer *packet, uint8_t ip_header_length) {
 	  }
 
 	  uint16_t final_checksum = (uint16_t)(~sum);
-	  packet->data[24] = final_checksum >> 8;
+	  packet->data[24] = (final_checksum >> 8) & 0xFF;
 	  packet->data[25] = final_checksum & 0xFF;
 
   }
@@ -222,7 +217,14 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
+    // Initialize ENC28J60 1 and 2
+    ENC28J60_Init(&spi1, mac1_addr);
+    HAL_IWDG_Refresh(&hiwdg);
 
+    ENC28J60_Init(&spi2, mac2_addr);
+    HAL_IWDG_Refresh(&hiwdg);
+
+    BufferPool_Init();
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -239,21 +241,35 @@ int main(void)
   MX_SPI2_Init();
   MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
-  // Initialize ENC28J60 1 and 2
-  ENC28J60_Init(&spi1, mac1_addr);
-  ENC28J60_Init(&spi2, mac2_addr);
 
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
+  osMutexDef(spi1_mutex_def);
+  osMutexDef(spi2_mutex_def);
+  osMutexDef(pool_mutex_def);
+
+  spi1_mutex = osMutexCreate(osMutex(spi1_mutex_def));
+  spi2_mutex = osMutexCreate(osMutex(spi2_mutex_def));
+  pool_mutex = osMutexCreate(osMutex(pool_mutex_def));
+
+  // Mutex protects concurrent access
+
+
+  // Define static muxtex
   /* USER CODE END RTOS_MUTEX */
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
-  xSem_INT_SPI1 = osSemaphoreCreate(osSemaphore(sem_INT_SPI1), 1);
-  xSem_INT_SPI2 = osSemaphoreCreate(osSemaphore(sem_INT_SPI2), 1);
-  xSem_DMA_SPI1_Done = osSemaphoreCreate(osSemaphore(sem_DMA_SPI1_Done), 1);
-  xSem_DMA_SPI2_Done = osSemaphoreCreate(osSemaphore(sem_DMA_SPI2_Done), 1);
+  osSemaphoreDef(xSem_DMA_SPI1_Done_Def);
+  osSemaphoreDef(xSem_DMA_SPI2_Done_Def);
+  osSemaphoreDef(xSem_INT_SPI1_Def);
+  osSemaphoreDef(xSem_INT_SPI2_Def);
+
+  xSem_DMA_SPI1_Done = osSemaphoreCreate(osSemaphore(xSem_DMA_SPI1_Done_Def), 1);
+  xSem_DMA_SPI2_Done = osSemaphoreCreate(osSemaphore(xSem_DMA_SPI2_Done_Def), 1);
+  xSem_INT_SPI1 = osSemaphoreCreate(osSemaphore(xSem_INT_SPI1_Def), 1);
+  xSem_INT_SPI2 = osSemaphoreCreate(osSemaphore(xSem_INT_SPI2_Def), 1);
   /* USER CODE END RTOS_SEMAPHORES */
 
   /* USER CODE BEGIN RTOS_TIMERS */
@@ -300,7 +316,7 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
-  BufferPool_Init();
+
   /* USER CODE END RTOS_THREADS */
 
   /* Start scheduler */
@@ -599,11 +615,13 @@ void vRX_SPI1_TaskFunc(void const * argument)
 	  // Wait for interrupt signal from the ENC28J60 1
 	  osSemaphoreWait(xSem_INT_SPI1, 100);
 
-	  /* There may be multiple packets in the ENC28J60 buffer -> Read all packet before waiting for the next interrupt
+	  /* There may be multiple packets in the ENC28J60 buffer -> Read maximum 3 packets before waiting for the next interrupt
 	   * Because the ENC28J60 only sends an interrupt even if there are many packets
 	   */
-	  while (ENC28J60_ReadReg(&spi1, EPKTCNT) > 0) {
+	  uint8_t rx_count = 0;
+	  while ((ENC28J60_ReadRegGlo(&spi1, EPKTCNT) > 0) && rx_count < 3) {
 		  RX_HandlePacket(&spi1, 1);
+		  rx_count++;
 	  }
     osDelay(1);
   }
@@ -629,8 +647,10 @@ void vRX_SPI2_TaskFunc(void const * argument)
 
 	  osSemaphoreWait(xSem_INT_SPI2, 100);
 
-	  while (ENC28J60_ReadReg(&spi2, EPKTCNT) > 0) {
+	  uint8_t rx_count = 0;
+	  while ((ENC28J60_ReadRegGlo(&spi2, EPKTCNT) > 0) && rx_count < 3) {
 		  RX_HandlePacket(&spi2, 2);
+		  rx_count++;
 	  }
     osDelay(1);
   }
@@ -668,7 +688,6 @@ void vTX_TaskFunc(void const * argument)
 
 		  BufferPool_Release(packet);
 	  }
-    osDelay(1);
   }
   /* USER CODE END vTX_TaskFunc */
 }
@@ -729,7 +748,8 @@ void vPacket_Processing_TaskFunc(void const * argument)
 		  uint8_t ip_header_length = (packet->data[14] & 0x0F) * 4;
 		  // Calculate the length of UDP header (Ethernet header (14), IP header, UDP header)
 		  uint16_t udp_payload_offset = 14 + ip_header_length + 8;
-		  if (packet->length - udp_payload_offset > PAYLOAD_MAX_SIZE) {
+
+		  if ((packet->length - udp_payload_offset) > PAYLOAD_MAX_SIZE || udp_payload_offset >= packet->length) {
 			  BufferPool_Release(packet);
 			  continue;
 		  }
@@ -769,12 +789,11 @@ void vPacket_Processing_TaskFunc(void const * argument)
 		  packet->data[udp_checksum_offset] = 0x00;
 		  packet->data[udp_checksum_offset + 1] = 0x00;
 
-		  // Step 4: Put into the xRX_Queue
+		  // Step 4: Put into the xTX_Queue
 		  if (osMessagePut(xTX_QueueHandle, (uint32_t)packet, 10) != osOK) {
 			  BufferPool_Release(packet);
 		  }
 	  }
-    osDelay(1);
   }
   /* USER CODE END vPacket_Processing_TaskFunc */
 }
@@ -825,7 +844,7 @@ void vHeartbeat_TaskFunc(void const * argument)
 		  link_down_count_spi2 = 0;
 	  }
 
-    osDelay(500);
+    osDelay(1000);
   }
   /* USER CODE END vHeartbeat_TaskFunc */
 }

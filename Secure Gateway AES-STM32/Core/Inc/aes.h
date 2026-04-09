@@ -4,13 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "buffer_pool.h"
-// #define the macros below to 1/0 to enable/disable the mode of operation.
-//
-// CBC enables AES encryption in CBC-mode of operation.
-// CTR enables encryption in counter-mode.
-// ECB enables the basic ECB 16-byte block algorithm. All can be enabled simultaneously.
 
-// The #ifndef-guard allows it to be configured before #include'ing or at compile time.
 #define CBC 1
 #define AES128 1
 
@@ -24,14 +18,8 @@ typedef struct
   uint8_t Iv[AES_BLOCKLEN];
 } AES_ctx;
 
-void AES_init_ctx(AES_ctx* ctx, const uint8_t* key);
 void AES_init_ctx_iv(AES_ctx* ctx, const uint8_t* key, const uint8_t* iv);
 void AES_ctx_set_iv(AES_ctx* ctx, const uint8_t* iv);
-
-// buffer size MUST be mutile of AES_BLOCKLEN;
-// Suggest https://en.wikipedia.org/wiki/Padding_(cryptography)#PKCS7 for padding scheme
-// NOTES: you need to set IV in ctx via AES_init_ctx_iv() or AES_ctx_set_iv()
-//        no IV should ever be reused with the same key
 
 void AES_CBC_encrypt_buffer(AES_ctx* ctx, uint8_t* buf, size_t length);
 void AES_CBC_PKCS7_Encrypt(AES_ctx* ctx, PacketBuffer* packet, uint16_t start_offset);

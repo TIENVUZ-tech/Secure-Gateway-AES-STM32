@@ -1,4 +1,4 @@
 ../Core/Src/freertos.c:72:6:vApplicationGetIdleTaskMemory	24	static
-../Core/Src/freertos.c:84:6:HAL_GPIO_EXTI_Callback	16	static
-../Core/Src/freertos.c:95:6:HAL_SPI_RxCpltCallback	16	static
-../Core/Src/freertos.c:104:6:HAL_SPI_TxCpltCallback	16	static
+../Core/Src/freertos.c:84:6:HAL_GPIO_EXTI_Callback	24	static,ignoring_inline_asm
+../Core/Src/freertos.c:100:6:HAL_SPI_RxCpltCallback	24	static,ignoring_inline_asm
+../Core/Src/freertos.c:113:6:HAL_SPI_TxCpltCallback	24	static,ignoring_inline_asm

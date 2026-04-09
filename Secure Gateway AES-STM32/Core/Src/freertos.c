@@ -83,31 +83,44 @@ void vApplicationGetIdleTaskMemory( StaticTask_t **ppxIdleTaskTCBBuffer, StackTy
 // EXTI Callback - automatically called by HAL when ENC28J60 pulls the INT pin to low to indicate a new packet
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 
+	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
 	if (GPIO_Pin == GPIO_PIN_0) {
 		// Wake up vRX_SPI1_Task
-		osSemaphoreRelease(xSem_INT_SPI1);
+		xSemaphoreGiveFromISR(xSem_INT_SPI1, &xHigherPriorityTaskWoken);
 	} else if (GPIO_Pin == GPIO_PIN_1) {
 		// Wake up vRX_SPI2_Task
-		osSemaphoreRelease(xSem_INT_SPI2);
+		xSemaphoreGiveFromISR(xSem_INT_SPI2, &xHigherPriorityTaskWoken);
 	}
+
+	// Wake up the higher priority task
+	portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 // The automatic callback is invoked when the DMA is complete
 void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi) {
 
+	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
 	if (hspi->Instance == SPI1) {
-		osSemaphoreRelease(xSem_DMA_SPI1_Done);
+		xSemaphoreGiveFromISR(xSem_DMA_SPI1_Done, &xHigherPriorityTaskWoken);
 	} else if (hspi->Instance == SPI2) {
-		osSemaphoreRelease(xSem_DMA_SPI2_Done);
+		xSemaphoreGiveFromISR(xSem_DMA_SPI2_Done, &xHigherPriorityTaskWoken);
 	}
+
+	portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
 void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi) {
 
+	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
 	if (hspi->Instance == SPI1) {
-		osSemaphoreRelease(xSem_DMA_SPI1_Done);
+		xSemaphoreGiveFromISR(xSem_DMA_SPI1_Done, &xHigherPriorityTaskWoken);
 	} else if (hspi->Instance == SPI2) {
-		osSemaphoreRelease(xSem_DMA_SPI2_Done);
+		xSemaphoreGiveFromISR(xSem_DMA_SPI2_Done, &xHigherPriorityTaskWoken);
 	}
+
+	portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
 /* USER CODE END Application */

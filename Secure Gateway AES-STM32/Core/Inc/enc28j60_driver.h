@@ -142,6 +142,8 @@
 // extern Semaphore
 extern osSemaphoreId xSem_DMA_SPI1_Done;
 extern osSemaphoreId xSem_DMA_SPI2_Done;
+extern osMutexId spi1_mutex;
+extern osMutexId spi2_mutex;
 
 // Configure struct
 typedef struct {
@@ -154,6 +156,7 @@ typedef struct {
     uint8_t current_bank;
 } ENC28J60_Config;
 
+/*
 // Read Control Register Command
 uint8_t ENC28J60_ReadOp (ENC28J60_Config *spi, uint8_t opcode, uint8_t address);
 
@@ -171,15 +174,13 @@ void ENC28J60_WriteReg (ENC28J60_Config *spi, uint8_t address, uint8_t data);
 
 // Write data into a PHY register
 void ENC28J60_WritePhy (ENC28J60_Config *spi, uint8_t address, uint16_t data);
+*/
+
+// Read a register
+uint8_t ENC28J60_ReadRegGlo (ENC28J60_Config *spi, uint8_t address);
 
 // Read data from a PHY register
 uint16_t ENC28J60_ReadPhy (ENC28J60_Config *spi, uint8_t address);
-
-// Return the revision ID, used in main to verify chip operation
-uint8_t ENC28J60_GetRevision (ENC28J60_Config *spi);
-
-// Check link physical status
-uint8_t ENC28J60_LinkUp (ENC28J60_Config *spi);
 
 // Initialize ENC28J60
 void ENC28J60_Init (ENC28J60_Config *spi, uint8_t *mac_address);

@@ -8,6 +8,8 @@
 #define BUFFER_COUNT 10
 #define BUFFER_SIZE 614
 
+extern osMutexId pool_mutex;
+
 typedef enum {
 	BUFFER_FREE = 0,
 	BUFFER_IN_USE = 1
