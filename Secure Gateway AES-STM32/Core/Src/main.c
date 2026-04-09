@@ -851,7 +851,7 @@ void vHeartbeat_TaskFunc(void const * argument)
 		  link_down_count_spi2 = 0;
 	  }
 
-    osDelay(1000);
+    osDelay(500);
   }
   /* USER CODE END vHeartbeat_TaskFunc */
 }

@@ -2023,8 +2023,9 @@ void ENC28J60_Init(ENC28J60_Config *spi, uint8_t *mac_address) {
  8000dda:	f7ff feb0 	bl	8000b3e <ENC28J60_WritePhy>
 
     // Receive filter: Unicast + Broadcast + CRC valid
-    ENC28J60_WriteReg(spi, ERXFCON, ERXFCON_UCEN | ERXFCON_CRCEN | ERXFCON_BCEN);
- 8000dde:	22a1      	movs	r2, #161	@ 0xa1
+    // ENC28J60_WriteReg(spi, ERXFCON, ERXFCON_UCEN | ERXFCON_CRCEN | ERXFCON_BCEN);
+    ENC28J60_WriteReg(spi, ERXFCON, ERXFCON_CRCEN);
+ 8000dde:	2220      	movs	r2, #32
  8000de0:	2138      	movs	r1, #56	@ 0x38
  8000de2:	6878      	ldr	r0, [r7, #4]
  8000de4:	f7ff fe94 	bl	8000b10 <ENC28J60_WriteReg>
@@ -4802,8 +4803,8 @@ void vHeartbeat_TaskFunc(void const * argument)
  8001fee:	701a      	strb	r2, [r3, #0]
 	  }
 
-    osDelay(1000);
- 8001ff0:	f44f 707a 	mov.w	r0, #1000	@ 0x3e8
+    osDelay(500);
+ 8001ff0:	f44f 70fa 	mov.w	r0, #500	@ 0x1f4
  8001ff4:	f003 f8a3 	bl	800513e <osDelay>
   {
  8001ff8:	e7a8      	b.n	8001f4c <vHeartbeat_TaskFunc+0x8>

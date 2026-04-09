@@ -156,7 +156,8 @@ void ENC28J60_Init(ENC28J60_Config *spi, uint8_t *mac_address) {
     ENC28J60_WritePhy(spi, PHLCON, 0x347A);
 
     // Receive filter: Unicast + Broadcast + CRC valid
-    ENC28J60_WriteReg(spi, ERXFCON, ERXFCON_UCEN | ERXFCON_CRCEN | ERXFCON_BCEN);
+    // ENC28J60_WriteReg(spi, ERXFCON, ERXFCON_UCEN | ERXFCON_CRCEN | ERXFCON_BCEN);
+    ENC28J60_WriteReg(spi, ERXFCON, ERXFCON_CRCEN);
 
     // Enable receive
     ENC28J60_WriteOp(spi, ENC28J60_BIT_FIELD_SET, ECON1, ECON1_RXEN);
