@@ -54,6 +54,7 @@ static uint8_t ENC28J60_ReadReg(ENC28J60_Config *spi, uint8_t address) {
 
 uint8_t ENC28J60_ReadRegGlo(ENC28J60_Config *spi, uint8_t address) {
 	spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 50) : osMutexWait(spi2_mutex, 50);
+
 	uint8_t data = ENC28J60_ReadReg(spi, address);
 	spi->hspi->Instance == SPI1 ? osMutexRelease(spi1_mutex) : osMutexRelease(spi2_mutex);
 	return data;
@@ -256,7 +257,16 @@ uint16_t ENC28J60_ReceivePacket(ENC28J60_Config *spi, uint8_t *pBuffer, uint16_t
     // Check length and Receive Status Vector bit 7
     if (!(rxstat & 0x0080) || len > max_length) {
         HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_SET);
-        goto release;   // skip error or too long packet
+
+        if (next_ptr >= RX_START && next_ptr <= RX_END) {
+        	goto release;
+        } else {
+        	// next_ptr is an invalid value
+        	spi->next_packet_ptr = RX_START;
+        	ENC28J60_WriteOp(spi, ENC28J60_BIT_FIELD_SET, ECON2, ECON2_PKTDEC);
+        	spi->hspi->Instance == SPI1 ? osMutexRelease(spi1_mutex) : osMutexRelease(spi2_mutex);
+        	return 0;
+        }
     }
 
     // Receive payload
@@ -264,6 +274,7 @@ uint16_t ENC28J60_ReceivePacket(ENC28J60_Config *spi, uint8_t *pBuffer, uint16_t
     	HAL_SPI_Receive_DMA(spi->hspi, pBuffer, len);
     	if (osSemaphoreWait(xSem_DMA_SPI1_Done, 50) != osOK) {
     		HAL_SPI_DMAStop(spi->hspi);
+    		HAL_GPIO_WritePin(spi->NSS_Port, spi->RST_Pin, GPIO_PIN_SET);
     		osMutexRelease(spi1_mutex);
     		return 0;
     	}
@@ -271,6 +282,7 @@ uint16_t ENC28J60_ReceivePacket(ENC28J60_Config *spi, uint8_t *pBuffer, uint16_t
     	HAL_SPI_Receive_DMA(spi->hspi, pBuffer, len);
     	if (osSemaphoreWait(xSem_DMA_SPI2_Done, 50) != osOK) {
     		HAL_SPI_DMAStop(spi->hspi);
+    		HAL_GPIO_WritePin(spi->NSS_Port, spi->RST_Pin, GPIO_PIN_SET);
     		osMutexRelease(spi2_mutex);
     		return 0;
     	}

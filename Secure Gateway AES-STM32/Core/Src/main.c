@@ -134,8 +134,6 @@ void User_Init(void);
 extern ENC28J60_Config spi1;
 extern ENC28J60_Config spi2;
 
-extern IWDG_HandleTypeDef hiwdg;
-
 // Local MAC address
 uint8_t mac1_addr[6] = {0x02, 0x00, 0x00, 0x00, 0x00, 0x01};
 uint8_t mac2_addr[6] = {0x02, 0x00, 0x00, 0x00, 0x00, 0x02};
@@ -312,7 +310,7 @@ int main(void)
   vTX_TaskHandle = osThreadCreate(osThread(vTX_Task), NULL);
 
   /* definition and creation of vPacket_Processing_Task */
-  osThreadStaticDef(vPacket_Processing_Task, vPacket_Processing_TaskFunc, osPriorityNormal, 0, 256, vPacket_Processing_TaskBuffer, &vPacket_Processing_TaskControlBlock);
+  osThreadStaticDef(vPacket_Processing_Task, vPacket_Processing_TaskFunc, osPriorityNormal, 0, 512, vPacket_Processing_TaskBuffer, &vPacket_Processing_TaskControlBlock);
   vPacket_Processing_TaskHandle = osThreadCreate(osThread(vPacket_Processing_Task), NULL);
 
   /* definition and creation of vHearbeat_Task */
@@ -331,7 +329,6 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  User_Init();
 
   while (1)
   {
@@ -537,7 +534,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOA, RST_SPI1_Pin|RST_SPI2_Pin|NSS_SPI1_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(NSS_SPI2_GPIO_Port, NSS_SPI2_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(NSS_SPI2_GPIO_Port, NSS_SPI2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : HEART_BEAT_Pin */
   GPIO_InitStruct.Pin = HEART_BEAT_Pin;
@@ -621,11 +618,11 @@ void vRX_SPI1_TaskFunc(void const * argument)
 	  // Wait for interrupt signal from the ENC28J60 1
 	  osSemaphoreWait(xSem_INT_SPI1, 50);
 
-	  /* There may be multiple packets in the ENC28J60 buffer -> Read maximum 3 packets before waiting for the next interrupt
+	  /* There may be multiple packets in the ENC28J60 buffer -> Read maximum 6 packets before waiting for the next interrupt
 	   * Because the ENC28J60 only sends an interrupt even if there are many packets
 	   */
 	  uint8_t rx_count = 0;
-	  while ((ENC28J60_ReadRegGlo(&spi1, EPKTCNT) > 0) && rx_count < 3) {
+	  while ((ENC28J60_ReadRegGlo(&spi1, EPKTCNT) > 0) && rx_count < 6) {
 		  RX_HandlePacket(&spi1, 1);
 		  rx_count++;
 	  }
@@ -654,7 +651,7 @@ void vRX_SPI2_TaskFunc(void const * argument)
 	  osSemaphoreWait(xSem_INT_SPI2, 50);
 
 	  uint8_t rx_count = 0;
-	  while ((ENC28J60_ReadRegGlo(&spi2, EPKTCNT) > 0) && rx_count < 3) {
+	  while ((ENC28J60_ReadRegGlo(&spi2, EPKTCNT) > 0) && rx_count < 6) {
 		  RX_HandlePacket(&spi2, 2);
 		  rx_count++;
 	  }
@@ -821,6 +818,7 @@ void vPacket_Processing_TaskFunc(void const * argument)
 void vHeartbeat_TaskFunc(void const * argument)
 {
   /* USER CODE BEGIN vHeartbeat_TaskFunc */
+	User_Init();
   /* Infinite loop */
   for(;;)
   {
@@ -834,27 +832,32 @@ void vHeartbeat_TaskFunc(void const * argument)
 	  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
 
 	  // Monitor the Link status of Module 1 (SPI1)
-	  uint16_t phstat1_1 = ENC28J60_ReadPhy(&spi1, PHSTAT1);
-	  if (!(phstat1_1 & PHSTAT1_LLSTAT)) { // Link down
-		  link_down_count_spi1++;
-		  if (link_down_count_spi1 >= 8) { // Link down 4s
-			  ENC28J60_Init(&spi1, mac1_addr);
-			  link_down_count_spi1 = 0;
+	  if (osMutexWait(spi1_mutex, 100) == osOK) {
+		  uint16_t phstat1_1 = ENC28J60_ReadPhy(&spi1, PHSTAT1);
+		  if (!(phstat1_1 & PHSTAT1_LLSTAT)) { // Link down
+			  link_down_count_spi1++;
+			  if (link_down_count_spi1 >= 8) { // Link down 4s
+				  ENC28J60_Init(&spi1, mac1_addr);
+				  link_down_count_spi1 = 0;
+			  }
+		  } else {
+			  link_down_count_spi1 = 0; // Link up
 		  }
-	  } else {
-		  link_down_count_spi1 = 0; // Link up
 	  }
 
+
 	  // Monitor the Link status of Module 2 (SPI2)
-	  uint16_t phstat1_2 = ENC28J60_ReadPhy(&spi2, PHSTAT1);
-	  if (!(phstat1_2 & PHSTAT1_LLSTAT)) { // Link down
-		  link_down_count_spi2++;
-		  if (link_down_count_spi2 >= 8) {
-			  ENC28J60_Init(&spi2, mac2_addr);
+	  if (osMutexWait(spi2_mutex, 100) == osOK) {
+		  uint16_t phstat1_2 = ENC28J60_ReadPhy(&spi2, PHSTAT1);
+		  if (!(phstat1_2 & PHSTAT1_LLSTAT)) { // Link down
+			  link_down_count_spi2++;
+			  if (link_down_count_spi2 >= 8) {
+				  ENC28J60_Init(&spi2, mac2_addr);
+				  link_down_count_spi2 = 0;
+			  }
+		  } else {
 			  link_down_count_spi2 = 0;
 		  }
-	  } else {
-		  link_down_count_spi2 = 0;
 	  }
 
     osDelay(500);

@@ -18,7 +18,7 @@ typedef enum {
 typedef struct {
 	uint8_t data[BUFFER_SIZE]; // Static memory
 	uint8_t source_spi; // 1 = SPI1, 2 = SPI2
-	uint8_t length; // The length of data
+	uint16_t length; // The length of data
 } PacketBuffer;
 
 void BufferPool_Init(void);
