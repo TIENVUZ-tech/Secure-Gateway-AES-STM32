@@ -40,8 +40,8 @@ typedef struct {
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 const IP_Key_Map key_table[] = {
-		{{192, 168, 1, 10}, {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F}},
-		{{192, 168, 1, 20}, {0x00, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xA0, 0xB0, 0xC0, 0xD0, 0xE0, 0xF0}}
+		{{10, 0, 0, 10}, {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F}},
+		{{10, 0, 0, 20}, {0x00, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xA0, 0xB0, 0xC0, 0xD0, 0xE0, 0xF0}}
 };
 
 #define KEY_TABLE_SIZE (sizeof(key_table)/sizeof(IP_Key_Map))
@@ -536,6 +536,9 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(NSS_SPI2_GPIO_Port, NSS_SPI2_Pin, GPIO_PIN_RESET);
 
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
+
   /*Configure GPIO pin : HEART_BEAT_Pin */
   GPIO_InitStruct.Pin = HEART_BEAT_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -549,8 +552,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : RST_SPI1_Pin RST_SPI2_Pin NSS_SPI1_Pin */
-  GPIO_InitStruct.Pin = RST_SPI1_Pin|RST_SPI2_Pin|NSS_SPI1_Pin;
+  /*Configure GPIO pins : RST_SPI1_Pin RST_SPI2_Pin NSS_SPI1_Pin PA10 */
+  GPIO_InitStruct.Pin = RST_SPI1_Pin|RST_SPI2_Pin|NSS_SPI1_Pin|GPIO_PIN_10;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -843,6 +846,7 @@ void vHeartbeat_TaskFunc(void const * argument)
 		  } else {
 			  link_down_count_spi1 = 0; // Link up
 		  }
+		  osMutexRelease(spi1_mutex);
 	  }
 
 
@@ -858,6 +862,7 @@ void vHeartbeat_TaskFunc(void const * argument)
 		  } else {
 			  link_down_count_spi2 = 0;
 		  }
+		  osMutexRelease(spi2_mutex);
 	  }
 
     osDelay(500);
