@@ -53,7 +53,7 @@ const IP_Key_Map key_table[] = {
 #define TASK_ALIVE_AES (1 << 2)
 #define TASK_ALIVE_TX  (1 << 3)
 
-#define TASK_ALIVE_ALL (TASK_ALIVE_RX1 | TASK_ALIVE_RX2 | TASK_ALIVE_AES | TASK_ALIVE_TX)
+// #define TASK_ALIVE_ALL (TASK_ALIVE_RX1 | TASK_ALIVE_RX2 | TASK_ALIVE_AES | TASK_ALIVE_TX)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -106,7 +106,8 @@ osMutexId spi2_mutex;
 osMutexId pool_mutex;
 
 // Alive flag
-volatile uint8_t task_alive_flags = 0;
+//volatile uint8_t task_alive_flags = 0;
+volatile uint8_t is_init_done = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -115,7 +116,7 @@ static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_SPI2_Init(void);
-static void MX_IWDG_Init(void);
+//static void MX_IWDG_Init(void);
 void StartDefaultTask(void const * argument);
 void vRX_SPI1_TaskFunc(void const * argument);
 void vRX_SPI2_TaskFunc(void const * argument);
@@ -145,6 +146,14 @@ void RX_HandlePacket(ENC28J60_Config *spi, uint8_t source_spi) {
 	// Request buffer from pool (if the pool is full, skip packet)
 	PacketBuffer *buffer = BufferPool_Acquire();
 	if (buffer == NULL) {
+//		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_10);
+//		HAL_Delay(50);
+//		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_10);
+//		HAL_Delay(50);
+//		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_10);
+//		HAL_Delay(50);
+//		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_10);
+
 		// Read and discard packet from the chip
 		static uint8_t packet[BUFFER_SIZE];
 		ENC28J60_ReceivePacket(spi, packet, BUFFER_SIZE);
@@ -156,19 +165,31 @@ void RX_HandlePacket(ENC28J60_Config *spi, uint8_t source_spi) {
 
 	// Check the length of packet
 	if (length <= 4) {
+//		for (uint8_t i = 0 ; i < 8; i++) {
+//			HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_10);
+//			HAL_Delay(50);
+//		}
 		BufferPool_Release(buffer);
 		return;
 	}
 
 	// Write metadata into buffer
-	buffer->length = length - 4; // Remove CRC bits
+	buffer->length = length;
 	buffer->source_spi = source_spi;
 
 	// Place the buffer pointer into xRX_Queue
 	if (osMessagePut(xRX_QueueHandle, (uint32_t)buffer, 0) != osOK) {
+//		for (uint8_t i = 0; i < 12; i++) {
+//			HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_10);
+//			HAL_Delay(50);
+//		}
 		BufferPool_Release(buffer);
 		return;
 	}
+
+//	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_SET);
+//	HAL_Delay(200);
+//	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
 }
 
 void Update_Ip_Checksum(PacketBuffer *packet, uint8_t ip_header_length) {
@@ -201,10 +222,10 @@ void Update_Ip_Checksum(PacketBuffer *packet, uint8_t ip_header_length) {
 void User_Init() {
 	// Initialize ENC28J60 1 and 2
 	ENC28J60_Init(&spi1, mac1_addr);
-	HAL_IWDG_Refresh(&hiwdg);
+	// HAL_IWDG_Refresh(&hiwdg);
 
 	ENC28J60_Init(&spi2, mac2_addr);
-	HAL_IWDG_Refresh(&hiwdg);
+	// HAL_IWDG_Refresh(&hiwdg);
 
 	BufferPool_Init();
 }
@@ -242,7 +263,7 @@ int main(void)
   MX_DMA_Init();
   MX_SPI1_Init();
   MX_SPI2_Init();
-  MX_IWDG_Init();
+  //MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -385,28 +406,28 @@ void SystemClock_Config(void)
   * @param None
   * @retval None
   */
-static void MX_IWDG_Init(void)
-{
+//static void MX_IWDG_Init(void)
+//{
+//
+//  /* USER CODE BEGIN IWDG_Init 0 */
+//
+//  /* USER CODE END IWDG_Init 0 */
+//
+//  /* USER CODE BEGIN IWDG_Init 1 */
+//
+//  /* USER CODE END IWDG_Init 1 */
+//  hiwdg.Instance = IWDG;
+//  hiwdg.Init.Prescaler = IWDG_PRESCALER_32;
+//  hiwdg.Init.Reload = 1250;
+//  if (HAL_IWDG_Init(&hiwdg) != HAL_OK)
+//  {
+//    Error_Handler();
+//  }
+//  /* USER CODE BEGIN IWDG_Init 2 */
+//
+//  /* USER CODE END IWDG_Init 2 */
 
-  /* USER CODE BEGIN IWDG_Init 0 */
-
-  /* USER CODE END IWDG_Init 0 */
-
-  /* USER CODE BEGIN IWDG_Init 1 */
-
-  /* USER CODE END IWDG_Init 1 */
-  hiwdg.Instance = IWDG;
-  hiwdg.Init.Prescaler = IWDG_PRESCALER_32;
-  hiwdg.Init.Reload = 1250;
-  if (HAL_IWDG_Init(&hiwdg) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN IWDG_Init 2 */
-
-  /* USER CODE END IWDG_Init 2 */
-
-}
+// }
 
 /**
   * @brief SPI1 Initialization Function
@@ -534,7 +555,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOA, RST_SPI1_Pin|RST_SPI2_Pin|NSS_SPI1_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(NSS_SPI2_GPIO_Port, NSS_SPI2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(NSS_SPI2_GPIO_Port, NSS_SPI2_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
@@ -610,13 +631,16 @@ void StartDefaultTask(void const * argument)
 void vRX_SPI1_TaskFunc(void const * argument)
 {
   /* USER CODE BEGIN vRX_SPI1_TaskFunc */
+	while (!is_init_done) {
+		osDelay(10);
+	}
   /* Infinite loop */
   for(;;)
   {
 	  // Report to vHeartbeat_Task
-	  taskENTER_CRITICAL();
-	  task_alive_flags |= TASK_ALIVE_RX1;
-	  taskEXIT_CRITICAL();
+//	  taskENTER_CRITICAL();
+//	  task_alive_flags |= TASK_ALIVE_RX1;
+//	  taskEXIT_CRITICAL();
 
 	  // Wait for interrupt signal from the ENC28J60 1
 	  osSemaphoreWait(xSem_INT_SPI1, 50);
@@ -644,12 +668,15 @@ void vRX_SPI1_TaskFunc(void const * argument)
 void vRX_SPI2_TaskFunc(void const * argument)
 {
   /* USER CODE BEGIN vRX_SPI2_TaskFunc */
+	while (!is_init_done) {
+		osDelay(10);
+	}
   /* Infinite loop */
   for(;;)
   {
-	  taskENTER_CRITICAL();
-	  task_alive_flags |= TASK_ALIVE_RX2;
-	  taskEXIT_CRITICAL();
+//	  taskENTER_CRITICAL();
+//	  task_alive_flags |= TASK_ALIVE_RX2;
+//	  taskEXIT_CRITICAL();
 
 	  osSemaphoreWait(xSem_INT_SPI2, 50);
 
@@ -673,14 +700,17 @@ void vRX_SPI2_TaskFunc(void const * argument)
 void vTX_TaskFunc(void const * argument)
 {
   /* USER CODE BEGIN vTX_TaskFunc */
+	while (!is_init_done) {
+		osDelay(10);
+	}
 	osEvent event;
 	PacketBuffer *packet;
   /* Infinite loop */
   for(;;)
   {
-	  taskENTER_CRITICAL();
-	  task_alive_flags |= TASK_ALIVE_TX;
-	  taskEXIT_CRITICAL();
+//	  taskENTER_CRITICAL();
+//	  task_alive_flags |= TASK_ALIVE_TX;
+//	  taskEXIT_CRITICAL();
 
 	  event = osMessageGet(xTX_QueueHandle, 50);
 	  if (event.status == osEventMessage) {
@@ -708,15 +738,18 @@ void vTX_TaskFunc(void const * argument)
 void vPacket_Processing_TaskFunc(void const * argument)
 {
   /* USER CODE BEGIN vPacket_Processing_TaskFunc */
+	while (!is_init_done) {
+		osDelay(10);
+	}
 	osEvent event;
 	PacketBuffer *packet;
 	static AES_ctx ctx;
   /* Infinite loop */
   for(;;)
   {
-	  taskENTER_CRITICAL();
-	  task_alive_flags |= TASK_ALIVE_AES;
-	  taskEXIT_CRITICAL();
+//	  taskENTER_CRITICAL();
+//	  task_alive_flags |= TASK_ALIVE_AES;
+//	  taskEXIT_CRITICAL();
 
 	  event = osMessageGet(xRX_QueueHandle, 50);
 	  if (event.status == osEventMessage) {
@@ -738,10 +771,12 @@ void vPacket_Processing_TaskFunc(void const * argument)
 		          BufferPool_Release(packet);
 		      }
 		      continue;
-		  }
+		  } else if (ethernet_type == 0x0800) { // IPv4
+			  uint16_t real_ip_length = (packet->data[16] << 8) | packet->data[17];
+			  if (14 + real_ip_length < packet->length) {
+				  packet->length = 14 + real_ip_length;
+			  }
 
-		  // IPv4 packet
-		  if (ethernet_type == 0x0800) {
 			  // Accept ICMP packets (ping)
 			  if (ip_protocol == 0x01) {
 				  if (osMessagePut(xTX_QueueHandle, (uint32_t)packet, 10) != osOK) {
@@ -755,6 +790,9 @@ void vPacket_Processing_TaskFunc(void const * argument)
 				  BufferPool_Release(packet);
 				  continue;
 			  }
+		  } else {
+			  BufferPool_Release(packet);
+			  continue;
 		  }
 
 		  // Read IHL (Internet Header Length)
@@ -787,6 +825,8 @@ void vPacket_Processing_TaskFunc(void const * argument)
 		  AES_init_ctx_iv(&ctx, found_key, iv);
 
 		  AES_CBC_PKCS7_Encrypt(&ctx, packet, udp_payload_offset);
+
+		  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_10);
 
 		  // Step 4: Recalculate checksum and length
 		  uint16_t udp_length = packet->length - 14 - ip_header_length;
@@ -821,49 +861,54 @@ void vPacket_Processing_TaskFunc(void const * argument)
 void vHeartbeat_TaskFunc(void const * argument)
 {
   /* USER CODE BEGIN vHeartbeat_TaskFunc */
+	// HAL_IWDG_Refresh(&hiwdg);
 	User_Init();
+
+	is_init_done = 1;
   /* Infinite loop */
   for(;;)
   {
 	  // Check the status of the Tasks
-	  if ((task_alive_flags & TASK_ALIVE_ALL) == TASK_ALIVE_ALL) {
-		  HAL_IWDG_Refresh(&hiwdg);
-		  task_alive_flags = 0;
-	  } else {}
+//	  if ((task_alive_flags & TASK_ALIVE_ALL) == TASK_ALIVE_ALL) {
+//		  HAL_IWDG_Refresh(&hiwdg);
+//		  taskENTER_CRITICAL();
+//		  task_alive_flags = 0;
+//		  taskEXIT_CRITICAL();
+//	  }
 
 	  // Blink heart led (PC13)
 	  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
 
-	  // Monitor the Link status of Module 1 (SPI1)
-	  if (osMutexWait(spi1_mutex, 100) == osOK) {
-		  uint16_t phstat1_1 = ENC28J60_ReadPhy(&spi1, PHSTAT1);
-		  if (!(phstat1_1 & PHSTAT1_LLSTAT)) { // Link down
-			  link_down_count_spi1++;
-			  if (link_down_count_spi1 >= 8) { // Link down 4s
-				  ENC28J60_Init(&spi1, mac1_addr);
-				  link_down_count_spi1 = 0;
-			  }
-		  } else {
-			  link_down_count_spi1 = 0; // Link up
-		  }
-		  osMutexRelease(spi1_mutex);
-	  }
-
-
-	  // Monitor the Link status of Module 2 (SPI2)
-	  if (osMutexWait(spi2_mutex, 100) == osOK) {
-		  uint16_t phstat1_2 = ENC28J60_ReadPhy(&spi2, PHSTAT1);
-		  if (!(phstat1_2 & PHSTAT1_LLSTAT)) { // Link down
-			  link_down_count_spi2++;
-			  if (link_down_count_spi2 >= 8) {
-				  ENC28J60_Init(&spi2, mac2_addr);
-				  link_down_count_spi2 = 0;
-			  }
-		  } else {
-			  link_down_count_spi2 = 0;
-		  }
-		  osMutexRelease(spi2_mutex);
-	  }
+//	  // Monitor the Link status of Module 1 (SPI1)
+//	  if (osMutexWait(spi1_mutex, 100) == osOK) {
+//		  uint16_t phstat1_1 = ENC28J60_ReadPhy(&spi1, PHSTAT1);
+//		  if (!(phstat1_1 & PHSTAT1_LLSTAT)) { // Link down
+//			  link_down_count_spi1++;
+//			  if (link_down_count_spi1 >= 8) { // Link down 4s
+//				  ENC28J60_Init(&spi1, mac1_addr);
+//				  link_down_count_spi1 = 0;
+//			  }
+//		  } else {
+//			  link_down_count_spi1 = 0; // Link up
+//		  }
+//		  osMutexRelease(spi1_mutex);
+//	  }
+//
+//
+//	  // Monitor the Link status of Module 2 (SPI2)
+//	  if (osMutexWait(spi2_mutex, 100) == osOK) {
+//		  uint16_t phstat1_2 = ENC28J60_ReadPhy(&spi2, PHSTAT1);
+//		  if (!(phstat1_2 & PHSTAT1_LLSTAT)) { // Link down
+//			  link_down_count_spi2++;
+//			  if (link_down_count_spi2 >= 8) {
+//				  ENC28J60_Init(&spi2, mac2_addr);
+//				  link_down_count_spi2 = 0;
+//			  }
+//		  } else {
+//			  link_down_count_spi2 = 0;
+//		  }
+//		  osMutexRelease(spi2_mutex);
+//	  }
 
     osDelay(500);
   }

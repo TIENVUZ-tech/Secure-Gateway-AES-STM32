@@ -16,7 +16,7 @@
 // Mask
 #define ADDR_MASK   0x1F
 #define BANK_MASK   0x60
-#define DUMMY_MASK   0x80  // MAC/MII need dummy byte when reading
+#define DUMMY_MASK  0x80  // MAC/MII need dummy byte when reading
 
 // Common registers (all banks)
 #define EIE     0x1B

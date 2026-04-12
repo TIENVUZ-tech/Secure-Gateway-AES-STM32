@@ -7,5 +7,5 @@
 ../Core/Src/enc28j60_driver.c:69:13:ENC28J60_WritePhy	3
 ../Core/Src/enc28j60_driver.c:80:10:ENC28J60_ReadPhy	3
 ../Core/Src/enc28j60_driver.c:97:6:ENC28J60_Init	3
-../Core/Src/enc28j60_driver.c:171:6:ENC28J60_SendPacket	9
-../Core/Src/enc28j60_driver.c:232:10:ENC28J60_ReceivePacket	15
+../Core/Src/enc28j60_driver.c:171:6:ENC28J60_SendPacket	11
+../Core/Src/enc28j60_driver.c:234:10:ENC28J60_ReceivePacket	20

@@ -102,11 +102,9 @@ void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi) {
 	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
 	if (hspi->Instance == SPI1) {
-		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_10);
 		xSemaphoreGiveFromISR(xSem_DMA_SPI1_Done, &xHigherPriorityTaskWoken);
 	} else if (hspi->Instance == SPI2) {
 		xSemaphoreGiveFromISR(xSem_DMA_SPI2_Done, &xHigherPriorityTaskWoken);
-		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_10);
 	}
 
 	portYIELD_FROM_ISR(xHigherPriorityTaskWoken);

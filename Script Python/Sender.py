@@ -14,7 +14,7 @@ sock.bind((SOURCE_IP_LAPTOP, 0))
 
 print(f"Preparing to send data to {TARGET_IP_RASP}:{TARGET_PORT}")
 
-message = "Hello Raspberry Pi IV, I am the king"
+message = "Hello Raspberry Pi IV, I am the king. You can't know me, but I know you."
 
 print(f"Sending: '{message}' (Length: {len(message)} bytes)")
 

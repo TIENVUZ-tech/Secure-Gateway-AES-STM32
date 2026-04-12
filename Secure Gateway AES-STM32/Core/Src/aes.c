@@ -300,7 +300,7 @@ void AES_CBC_encrypt_buffer(AES_ctx *ctx, uint8_t* buf, size_t length)
 
 void AES_CBC_PKCS7_Encrypt(AES_ctx* ctx, PacketBuffer* packet, uint16_t start_offset) {
 	// Check the valid offset
-	if (start_offset >= packet->length) {
+	if (start_offset > packet->length) {
 		return;
 	}
 
@@ -309,6 +309,10 @@ void AES_CBC_PKCS7_Encrypt(AES_ctx* ctx, PacketBuffer* packet, uint16_t start_of
 
 	// Calculate the number of bytes to pad
 	uint8_t padding_length = (uint8_t)(AES_BLOCKLEN - (payload_length % AES_BLOCKLEN));
+
+	if ((packet->length + padding_length) >BUFFER_SIZE) {
+		return;
+	}
 
 	// Add padding values to the end of the actual data
 	for (uint8_t i = 0; i < padding_length; i++) {

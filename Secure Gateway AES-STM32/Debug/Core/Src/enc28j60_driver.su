@@ -8,4 +8,4 @@
 ../Core/Src/enc28j60_driver.c:80:10:ENC28J60_ReadPhy	24	static
 ../Core/Src/enc28j60_driver.c:97:6:ENC28J60_Init	24	static
 ../Core/Src/enc28j60_driver.c:171:6:ENC28J60_SendPacket	32	static
-../Core/Src/enc28j60_driver.c:232:10:ENC28J60_ReceivePacket	48	static
+../Core/Src/enc28j60_driver.c:234:10:ENC28J60_ReceivePacket	48	static

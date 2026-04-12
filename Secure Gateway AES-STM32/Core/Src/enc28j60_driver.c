@@ -196,6 +196,7 @@ void ENC28J60_SendPacket(ENC28J60_Config *spi, uint8_t *packet_data, uint16_t le
     HAL_SPI_Transmit(spi->hspi, &cmd, 1, 100);
     HAL_SPI_Transmit(spi->hspi, &ctrl, 1, 100);
     if (spi->hspi->Instance == SPI1) {
+    	while (osSemaphoreWait(xSem_DMA_SPI1_Done, 0) == osOK); // Clear old semaphore
     	HAL_SPI_Transmit_DMA(spi->hspi, packet_data, length);
     	if (osSemaphoreWait(xSem_DMA_SPI1_Done, 50) != osOK) {
     		HAL_SPI_DMAStop(spi->hspi);
@@ -204,6 +205,7 @@ void ENC28J60_SendPacket(ENC28J60_Config *spi, uint8_t *packet_data, uint16_t le
     		return;
     	}
     } else {
+    	while (osSemaphoreWait(xSem_DMA_SPI2_Done, 0) == osOK);
     	HAL_SPI_Transmit_DMA(spi->hspi, packet_data, length);
     	if (osSemaphoreWait(xSem_DMA_SPI2_Done, 50) != osOK) {
     		HAL_SPI_DMAStop(spi->hspi);
@@ -271,18 +273,34 @@ uint16_t ENC28J60_ReceivePacket(ENC28J60_Config *spi, uint8_t *pBuffer, uint16_t
 
     // Receive payload
     if (spi->hspi->Instance == SPI1) {
+    	while (osSemaphoreWait(xSem_DMA_SPI1_Done, 0) == osOK);
     	HAL_SPI_Receive_DMA(spi->hspi, pBuffer, len);
     	if (osSemaphoreWait(xSem_DMA_SPI1_Done, 50) != osOK) {
     		HAL_SPI_DMAStop(spi->hspi);
-    		HAL_GPIO_WritePin(spi->NSS_Port, spi->RST_Pin, GPIO_PIN_SET);
+    		HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_SET);
+
+    		// Remove the error packet
+    		spi->next_packet_ptr = next_ptr;
+    		uint16_t erxrdpt = (next_ptr == RX_START) ? RX_END : next_ptr - 1;
+    		ENC28J60_WriteReg(spi, ERXRDPTL, erxrdpt & 0xFF);
+    		ENC28J60_WriteReg(spi, ERXRDPTH, erxrdpt >> 8);
+    		ENC28J60_WriteOp(spi, ENC28J60_BIT_FIELD_SET, ECON2, ECON2_PKTDEC);
     		osMutexRelease(spi1_mutex);
     		return 0;
     	}
     } else {
+    	while (osSemaphoreWait(xSem_DMA_SPI2_Done, 0) == osOK);
     	HAL_SPI_Receive_DMA(spi->hspi, pBuffer, len);
     	if (osSemaphoreWait(xSem_DMA_SPI2_Done, 50) != osOK) {
     		HAL_SPI_DMAStop(spi->hspi);
-    		HAL_GPIO_WritePin(spi->NSS_Port, spi->RST_Pin, GPIO_PIN_SET);
+    		HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_SET);
+
+    		// Remove the error packet
+			spi->next_packet_ptr = next_ptr;
+			uint16_t erxrdpt = (next_ptr == RX_START) ? RX_END : next_ptr - 1;
+			ENC28J60_WriteReg(spi, ERXRDPTL, erxrdpt & 0xFF);
+			ENC28J60_WriteReg(spi, ERXRDPTH, erxrdpt >> 8);
+			ENC28J60_WriteOp(spi, ENC28J60_BIT_FIELD_SET, ECON2, ECON2_PKTDEC);
     		osMutexRelease(spi2_mutex);
     		return 0;
     	}
@@ -295,6 +313,9 @@ release:
 
     // Update ERXRDPT (must be an odd number)
     uint16_t erxrdpt = (next_ptr == RX_START) ? RX_END : next_ptr - 1;
+    if (erxrdpt < RX_START || erxrdpt > RX_END) {
+    	erxrdpt = RX_END;
+    }
     ENC28J60_WriteReg(spi, ERXRDPTL, erxrdpt & 0xFF);
     ENC28J60_WriteReg(spi, ERXRDPTH, erxrdpt >> 8);
 
