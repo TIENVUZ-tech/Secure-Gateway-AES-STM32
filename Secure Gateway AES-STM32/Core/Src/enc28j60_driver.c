@@ -110,7 +110,7 @@ void ENC28J60_Init(ENC28J60_Config *spi, uint8_t *mac_address) {
     // Wait for oscillator
     uint32_t t0 = HAL_GetTick();
     while (!(ENC28J60_ReadOp(spi, ENC28J60_READ_CTRL_REG, ESTAT) & ESTAT_CLKRDY)) {
-        if (HAL_GetTick() - t0 > 20) return;  // timeout 20ms
+        if (HAL_GetTick() - t0 > 500) return;  // timeout 500ms
     }
 
     // Initialize RX

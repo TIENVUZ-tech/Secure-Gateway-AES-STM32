@@ -12,6 +12,6 @@
 ../Core/Src/main.c:668:6:vRX_SPI2_TaskFunc	4
 ../Core/Src/main.c:700:6:vTX_TaskFunc	5
 ../Core/Src/main.c:738:6:vPacket_Processing_TaskFunc	17
-../Core/Src/main.c:861:6:vHeartbeat_TaskFunc	1
-../Core/Src/main.c:926:6:HAL_TIM_PeriodElapsedCallback	2
-../Core/Src/main.c:944:6:Error_Handler	1
+../Core/Src/main.c:859:6:vHeartbeat_TaskFunc	1
+../Core/Src/main.c:924:6:HAL_TIM_PeriodElapsedCallback	2
+../Core/Src/main.c:942:6:Error_Handler	1

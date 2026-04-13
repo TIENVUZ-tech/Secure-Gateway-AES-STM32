@@ -826,8 +826,6 @@ void vPacket_Processing_TaskFunc(void const * argument)
 
 		  AES_CBC_PKCS7_Encrypt(&ctx, packet, udp_payload_offset);
 
-		  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_10);
-
 		  // Step 4: Recalculate checksum and length
 		  uint16_t udp_length = packet->length - 14 - ip_header_length;
 		  uint16_t udp_length_offset = 14 + ip_header_length + 4;
