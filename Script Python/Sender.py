@@ -29,7 +29,7 @@ try:
     for i in range(PACKET_COUNT):
         sock.sendto(payload, (TARGET_IP_RASP, TARGET_PORT))
         sent_count += 1
-        time.sleep(0.02)
+        time.sleep(0.05)
 
 except KeyboardInterrupt:
     print("\n[!] Stopped test by boss.")

@@ -12,13 +12,13 @@ static uint8_t ENC28J60_ReadOp(ENC28J60_Config *spi, uint8_t opcode, uint8_t add
     uint8_t header = opcode | (address & ADDR_MASK);
 
     HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_RESET);
-    HAL_SPI_Transmit(spi->hspi, &header, 1, 100);
+    HAL_SPI_Transmit(spi->hspi, &header, 1, 5);
 
     // MAC/MII registers need to remove a dummy byte
     if (address & DUMMY_MASK) {
-        HAL_SPI_Receive(spi->hspi, &result, 1, 100);
+        HAL_SPI_Receive(spi->hspi, &result, 1, 5);
     }
-    HAL_SPI_Receive(spi->hspi, &result, 1, 100);
+    HAL_SPI_Receive(spi->hspi, &result, 1, 5);
 
     HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_SET);
     return result;
@@ -28,8 +28,8 @@ static void ENC28J60_WriteOp(ENC28J60_Config *spi, uint8_t opcode, uint8_t addre
     uint8_t header = opcode | (address & ADDR_MASK);
 
     HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_RESET);
-    HAL_SPI_Transmit(spi->hspi, &header, 1, 100);
-    HAL_SPI_Transmit(spi->hspi, &data,   1, 100);
+    HAL_SPI_Transmit(spi->hspi, &header, 1, 5);
+    HAL_SPI_Transmit(spi->hspi, &data,   1, 5);
     HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_SET);
 }
 
@@ -53,8 +53,10 @@ static uint8_t ENC28J60_ReadReg(ENC28J60_Config *spi, uint8_t address) {
 }
 
 uint8_t ENC28J60_ReadRegGlo(ENC28J60_Config *spi, uint8_t address) {
-	spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 50) : osMutexWait(spi2_mutex, 50);
-
+	osStatus status = spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 5) : osMutexWait(spi2_mutex, 5);
+	if (status != osOK) {
+		return 0;
+	}
 	uint8_t data = ENC28J60_ReadReg(spi, address);
 	spi->hspi->Instance == SPI1 ? osMutexRelease(spi1_mutex) : osMutexRelease(spi2_mutex);
 	return data;
@@ -77,13 +79,16 @@ static void ENC28J60_WritePhy(ENC28J60_Config *spi, uint8_t address, uint16_t da
 }
 
 uint16_t ENC28J60_ReadPhy(ENC28J60_Config *spi, uint8_t address) {
-	spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 50) : osMutexWait(spi2_mutex, 50);
-    ENC28J60_WriteReg(spi, MIREGADR, address);
+	osStatus status = spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 5) : osMutexWait(spi2_mutex, 5);
+    if (status != osOK) {
+    	return 0;
+    }
+	ENC28J60_WriteReg(spi, MIREGADR, address);
     ENC28J60_WriteReg(spi, MICMD, MICMD_MIIRD);
 
     uint32_t t0 = HAL_GetTick();
     while (ENC28J60_ReadReg(spi, MISTAT) & MISTAT_BUSY) {
-    	if (HAL_GetTick() - t0 > 20) break;
+    	if (HAL_GetTick() - t0 > 10) break;
     }
     ENC28J60_WriteReg(spi, MICMD, 0x00);
 
@@ -95,7 +100,10 @@ uint16_t ENC28J60_ReadPhy(ENC28J60_Config *spi, uint8_t address) {
 }
 
 void ENC28J60_ClearErrors(ENC28J60_Config *spi) {
-	spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 50) : osMutexWait(spi2_mutex, 50);
+	osStatus status = spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 5) : osMutexWait(spi2_mutex, 5);
+	if (status != osOK) {
+		return;
+	}
 	if (ENC28J60_ReadReg(spi, EIR) & EIR_RXERIF) {
 		ENC28J60_WriteOp(spi, ENC28J60_BIT_FIELD_CLR, EIR, EIR_RXERIF);
 	}
@@ -103,8 +111,10 @@ void ENC28J60_ClearErrors(ENC28J60_Config *spi) {
 }
 
 void ENC28J60_Init(ENC28J60_Config *spi, uint8_t *mac_address) {
-	spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 50) : osMutexWait(spi2_mutex, 50);
-
+	osStatus status = spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 5) : osMutexWait(spi2_mutex, 5);
+	if (status != osOK) {
+		return;
+	}
     // Hardware Reset
     HAL_GPIO_WritePin(spi->RST_Port, spi->RST_Pin, GPIO_PIN_RESET);
     HAL_Delay(10);
@@ -114,13 +124,13 @@ void ENC28J60_Init(ENC28J60_Config *spi, uint8_t *mac_address) {
     // Soft Reset
     HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_RESET);
     uint8_t reset = ENC28J60_SYS_RST_CMD;
-    HAL_SPI_Transmit(spi->hspi, &reset, 1, 100);
+    HAL_SPI_Transmit(spi->hspi, &reset, 1, 5);
     HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_SET);
 
     // Wait for oscillator
     uint32_t t0 = HAL_GetTick();
     while (!(ENC28J60_ReadOp(spi, ENC28J60_READ_CTRL_REG, ESTAT) & ESTAT_CLKRDY)) {
-        if (HAL_GetTick() - t0 > 500) return;  // timeout 500ms
+        if (HAL_GetTick() - t0 > 10) return;  // timeout 10ms
     }
 
     // Initialize RX
@@ -181,8 +191,10 @@ void ENC28J60_Init(ENC28J60_Config *spi, uint8_t *mac_address) {
 }
 
 void ENC28J60_SendPacket(ENC28J60_Config *spi, uint8_t *packet_data, uint16_t length) {
-	spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 200) : osMutexWait(spi2_mutex, 200);
-
+	osStatus status = spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 10) : osMutexWait(spi2_mutex, 10);
+	if (status != osOK) {
+		return;
+	}
     // Wait for the previous transmission to complete
     uint32_t t0 = HAL_GetTick();
     while (ENC28J60_ReadOp(spi, ENC28J60_READ_CTRL_REG, ECON1) & ECON1_TXRTS) {
@@ -205,13 +217,14 @@ void ENC28J60_SendPacket(ENC28J60_Config *spi, uint8_t *packet_data, uint16_t le
     HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_RESET);
     uint8_t cmd = ENC28J60_WRITE_BUF_MEM;
     uint8_t ctrl = 0x00;  // Used configuration from MACON3
-    HAL_SPI_Transmit(spi->hspi, &cmd, 1, 100);
-    HAL_SPI_Transmit(spi->hspi, &ctrl, 1, 100);
+    HAL_SPI_Transmit(spi->hspi, &cmd, 1, 5);
+    HAL_SPI_Transmit(spi->hspi, &ctrl, 1, 5);
     if (spi->hspi->Instance == SPI1) {
     	while (osSemaphoreWait(xSem_DMA_SPI1_Done, 0) == osOK); // Clear old semaphore
     	HAL_SPI_Transmit_DMA(spi->hspi, packet_data, length);
-    	if (osSemaphoreWait(xSem_DMA_SPI1_Done, 50) != osOK) {
+    	if (osSemaphoreWait(xSem_DMA_SPI1_Done, 5) != osOK) {
     		HAL_SPI_DMAStop(spi->hspi);
+    		HAL_SPI_Abort(spi->hspi);
     		HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_SET);
     		osMutexRelease(spi1_mutex);
     		return;
@@ -219,8 +232,9 @@ void ENC28J60_SendPacket(ENC28J60_Config *spi, uint8_t *packet_data, uint16_t le
     } else {
     	while (osSemaphoreWait(xSem_DMA_SPI2_Done, 0) == osOK);
     	HAL_SPI_Transmit_DMA(spi->hspi, packet_data, length);
-    	if (osSemaphoreWait(xSem_DMA_SPI2_Done, 50) != osOK) {
+    	if (osSemaphoreWait(xSem_DMA_SPI2_Done, 5) != osOK) {
     		HAL_SPI_DMAStop(spi->hspi);
+    		HAL_SPI_Abort(spi->hspi);
     		HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_SET);
     		osMutexRelease(spi2_mutex);
     		return;
@@ -244,8 +258,10 @@ void ENC28J60_SendPacket(ENC28J60_Config *spi, uint8_t *packet_data, uint16_t le
 }
 
 uint16_t ENC28J60_ReceivePacket(ENC28J60_Config *spi, uint8_t *pBuffer, uint16_t max_length) {
-	spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 200) : osMutexWait(spi2_mutex, 200);
-
+	osStatus status = spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 10) : osMutexWait(spi2_mutex, 10);
+	if (status != osOK) {
+		return 0;
+	}
 	// Don't have any packet
     if (ENC28J60_ReadReg(spi, EPKTCNT) == 0) {
     	spi->hspi->Instance == SPI1 ? osMutexRelease(spi1_mutex) : osMutexRelease(spi2_mutex);
@@ -259,10 +275,10 @@ uint16_t ENC28J60_ReceivePacket(ENC28J60_Config *spi, uint8_t *pBuffer, uint16_t
     // Read 6 bytes header
     HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_RESET);
     uint8_t cmd = ENC28J60_READ_BUF_MEM;
-    HAL_SPI_Transmit(spi->hspi, &cmd, 1, 100);
+    HAL_SPI_Transmit(spi->hspi, &cmd, 1, 5);
 
     uint8_t  header[6];
-    HAL_SPI_Receive(spi->hspi, header, 6, 100);
+    HAL_SPI_Receive(spi->hspi, header, 6, 5);
 
     uint16_t next_ptr = (uint16_t)header[0] | ((uint16_t)header[1] << 8);
     uint16_t len = ((uint16_t)header[2] | ((uint16_t)header[3] << 8)) - 4; // Remove 4 bytes CRC
@@ -287,8 +303,9 @@ uint16_t ENC28J60_ReceivePacket(ENC28J60_Config *spi, uint8_t *pBuffer, uint16_t
     if (spi->hspi->Instance == SPI1) {
     	while (osSemaphoreWait(xSem_DMA_SPI1_Done, 0) == osOK);
     	HAL_SPI_Receive_DMA(spi->hspi, pBuffer, len);
-    	if (osSemaphoreWait(xSem_DMA_SPI1_Done, 50) != osOK) {
+    	if (osSemaphoreWait(xSem_DMA_SPI1_Done, 5) != osOK) {
     		HAL_SPI_DMAStop(spi->hspi);
+    		HAL_SPI_Abort(spi->hspi);
     		HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_SET);
 
     		// Remove the error packet
@@ -303,8 +320,9 @@ uint16_t ENC28J60_ReceivePacket(ENC28J60_Config *spi, uint8_t *pBuffer, uint16_t
     } else {
     	while (osSemaphoreWait(xSem_DMA_SPI2_Done, 0) == osOK);
     	HAL_SPI_Receive_DMA(spi->hspi, pBuffer, len);
-    	if (osSemaphoreWait(xSem_DMA_SPI2_Done, 50) != osOK) {
+    	if (osSemaphoreWait(xSem_DMA_SPI2_Done, 5) != osOK) {
     		HAL_SPI_DMAStop(spi->hspi);
+    		HAL_SPI_Abort(spi->hspi);
     		HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_SET);
 
     		// Remove the error packet
@@ -343,8 +361,10 @@ release:
 
 void ENC28J60_DropPacket(ENC28J60_Config *spi) {
 
-	spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 100) : osMutexWait(spi2_mutex, 100);
-
+	osStatus status = spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 5) : osMutexWait(spi2_mutex, 5);
+	if (status != osOK) {
+		return;
+	}
 	ENC28J60_WriteReg(spi, ERDPTL, spi->next_packet_ptr & 0xFF);
 	ENC28J60_WriteReg(spi, ERDPTH, spi->next_packet_ptr >> 8);
 	uint8_t header[2];
@@ -352,8 +372,8 @@ void ENC28J60_DropPacket(ENC28J60_Config *spi) {
 
 	HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_RESET);
 	uint8_t cmd = ENC28J60_READ_BUF_MEM;
-	HAL_SPI_Transmit(spi->hspi, &cmd, 1, 100);
-	HAL_SPI_Receive(spi->hspi, header, 2, 100);
+	HAL_SPI_Transmit(spi->hspi, &cmd, 1, 5);
+	HAL_SPI_Receive(spi->hspi, header, 2, 5);
 	next_packet_ptr = (uint16_t)header[0] | ((uint16_t)header[1] << 8);
 	HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_SET);
 

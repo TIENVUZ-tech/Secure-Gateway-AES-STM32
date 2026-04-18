@@ -103,7 +103,7 @@ osSemaphoreId xSem_INT_SPI2;
 // Mutex
 osMutexId spi1_mutex;
 osMutexId spi2_mutex;
-osMutexId pool_mutex;
+//osMutexId pool_mutex;
 
 // Alive flag
 volatile uint8_t task_alive_flags = 0;
@@ -155,6 +155,10 @@ void RX_HandlePacket(ENC28J60_Config *spi, uint8_t source_spi) {
 
 	// Read the packet from ENC28J60 to buffer
 	uint16_t length = ENC28J60_ReceivePacket(spi, buffer->data, BUFFER_SIZE);
+	if (length < 42) {
+		BufferPool_Release(buffer);
+		return;
+	}
 
 	// Write metadata into buffer
 	buffer->length = length;
@@ -257,11 +261,11 @@ int main(void)
   /* add mutexes, ... */
   osMutexDef(spi1_mutex_def);
   osMutexDef(spi2_mutex_def);
-  osMutexDef(pool_mutex_def);
+  //osMutexDef(pool_mutex_def);
 
   spi1_mutex = osMutexCreate(osMutex(spi1_mutex_def));
   spi2_mutex = osMutexCreate(osMutex(spi2_mutex_def));
-  pool_mutex = osMutexCreate(osMutex(pool_mutex_def));
+  //pool_mutex = osMutexCreate(osMutex(pool_mutex_def));
 
   // Mutex protects concurrent access
 
@@ -316,7 +320,7 @@ int main(void)
   vTX_TaskHandle = osThreadCreate(osThread(vTX_Task), NULL);
 
   /* definition and creation of vPacket_Processing_Task */
-  osThreadStaticDef(vPacket_Processing_Task, vPacket_Processing_TaskFunc, osPriorityNormal, 0, 512, vPacket_Processing_TaskBuffer, &vPacket_Processing_TaskControlBlock);
+  osThreadStaticDef(vPacket_Processing_Task, vPacket_Processing_TaskFunc, osPriorityHigh, 0, 512, vPacket_Processing_TaskBuffer, &vPacket_Processing_TaskControlBlock);
   vPacket_Processing_TaskHandle = osThreadCreate(osThread(vPacket_Processing_Task), NULL);
 
   /* definition and creation of vHearbeat_Task */
@@ -728,7 +732,11 @@ void vPacket_Processing_TaskFunc(void const * argument)
 	}
 	osEvent event;
 	PacketBuffer *packet;
-	static AES_ctx ctx;
+	AES_ctx precomputed_ctx[KEY_TABLE_SIZE];
+	uint8_t iv[16] = {0};
+	for (uint8_t i = 0; i < KEY_TABLE_SIZE; i++) {
+		AES_init_ctx_iv(&precomputed_ctx[i], key_table[i].key, iv);
+	}
   /* Infinite loop */
   for(;;)
   {
@@ -752,7 +760,7 @@ void vPacket_Processing_TaskFunc(void const * argument)
 
 		  // Forward ARP packets
 		  if (ethernet_type == 0x0806) {
-		      if (osMessagePut(xTX_QueueHandle, (uint32_t)packet, 10) != osOK) {
+		      if (osMessagePut(xTX_QueueHandle, (uint32_t)packet, 0) != osOK) {
 		          BufferPool_Release(packet);
 		      }
 		      continue;
@@ -764,7 +772,7 @@ void vPacket_Processing_TaskFunc(void const * argument)
 
 			  // Accept ICMP packets (ping)
 			  if (ip_protocol == 0x01) {
-				  if (osMessagePut(xTX_QueueHandle, (uint32_t)packet, 10) != osOK) {
+				  if (osMessagePut(xTX_QueueHandle, (uint32_t)packet, 0) != osOK) {
 					  BufferPool_Release(packet);
 				  }
 				  continue;
@@ -794,11 +802,11 @@ void vPacket_Processing_TaskFunc(void const * argument)
 		  uint8_t *source_ip = &packet->data[26];
 		  uint8_t *dest_ip = &packet->data[30];
 
-		  uint8_t *found_key = NULL;
+		  int8_t found_key_index = -1;
 		  uint8_t dest_key_found = 0;
 		  for (uint8_t i = 0; i < KEY_TABLE_SIZE; i++) {
 			  if (memcmp(source_ip, key_table[i].ip, 4) == 0) {
-				  found_key = (uint8_t*)key_table[i].key;
+				  found_key_index = i;
 				  break;
 			  }
 		  }
@@ -810,22 +818,22 @@ void vPacket_Processing_TaskFunc(void const * argument)
 			  }
 		  }
 
-		  if (found_key == NULL || dest_key_found == 0) {
+		  if (found_key_index == -1 || dest_key_found == 0) {
 			  BufferPool_Release(packet);
 			  continue;
 		  }
 
 		  // Step 3: Encrypt payload
-		  uint8_t iv[16] = {0}; // static Initialization Vector
-		  AES_init_ctx_iv(&ctx, found_key, iv);
-
-		  AES_CBC_PKCS7_Encrypt(&ctx, packet, udp_payload_offset);
+//		  uint8_t iv[16] = {0}; // static Initialization Vector
+//		  AES_init_ctx_iv(&ctx, found_key, iv);
+		  AES_ctx_set_iv(&precomputed_ctx[found_key_index], iv);
+		  AES_CBC_PKCS7_Encrypt(&precomputed_ctx[found_key_index], packet, udp_payload_offset);
 
 		  // Step 4: Recalculate checksum and length
 		  Update_Ip_Checksum(packet, ip_header_length);
 
 		  // Step 5: Put into the xTX_Queue
-		  if (osMessagePut(xTX_QueueHandle, (uint32_t)packet, 10) != osOK) {
+		  if (osMessagePut(xTX_QueueHandle, (uint32_t)packet, 0) != osOK) {
 			  BufferPool_Release(packet);
 		  }
 	  }

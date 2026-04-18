@@ -1,3 +1,3 @@
 ../Core/Src/buffer_pool.c:7:6:BufferPool_Init	16	static
 ../Core/Src/buffer_pool.c:16:15:BufferPool_Acquire	16	static
-../Core/Src/buffer_pool.c:34:6:BufferPool_Release	24	static
+../Core/Src/buffer_pool.c:40:6:BufferPool_Release	24	static
