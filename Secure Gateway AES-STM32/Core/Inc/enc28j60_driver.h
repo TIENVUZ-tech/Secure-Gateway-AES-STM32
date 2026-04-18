@@ -97,6 +97,7 @@
 // EIR bits
 #define EIR_TXIF        0x08
 #define EIR_TXERIF      0x02
+#define EIR_RXERIF      0x01
 
 // ERXFCON bits
 #define ERXFCON_UCEN    0x80
@@ -145,15 +146,15 @@ extern osSemaphoreId xSem_DMA_SPI2_Done;
 extern osMutexId spi1_mutex;
 extern osMutexId spi2_mutex;
 
-// Configure struct
+// Configure structure
 typedef struct {
-    SPI_HandleTypeDef *hspi;
-    GPIO_TypeDef *NSS_Port;
-    uint16_t NSS_Pin;
-    uint16_t next_packet_ptr;
-    GPIO_TypeDef *RST_Port;
-    uint16_t RST_Pin;
-    uint8_t current_bank;
+    SPI_HandleTypeDef *hspi; // SPI peripheral handle (SPI1 or SPI2)
+    GPIO_TypeDef *NSS_Port; // Negative slave Select Port
+    uint16_t NSS_Pin; // Negative slave Select Pin
+    uint16_t next_packet_ptr; // Pointer managing the position of the next packet
+    GPIO_TypeDef *RST_Port; // Reset Port
+    uint16_t RST_Pin; // Reset Pin
+    uint8_t current_bank; // Store the current register bank
 } ENC28J60_Config;
 
 /*
@@ -182,6 +183,9 @@ uint8_t ENC28J60_ReadRegGlo (ENC28J60_Config *spi, uint8_t address);
 // Read data from a PHY register
 uint16_t ENC28J60_ReadPhy (ENC28J60_Config *spi, uint8_t address);
 
+// Clear Receive Error Interrupt Flag bit
+void ENC28J60_ClearErrors(ENC28J60_Config *spi);
+
 // Initialize ENC28J60
 void ENC28J60_Init (ENC28J60_Config *spi, uint8_t *mac_address);
 
@@ -190,5 +194,8 @@ void ENC28J60_SendPacket (ENC28J60_Config *spi, uint8_t *packet_data, uint16_t l
 
 // Receive a packet
 uint16_t ENC28J60_ReceivePacket (ENC28J60_Config *spi, uint8_t *pBuffer, uint16_t max_length);
+
+// Drop a packet
+void ENC28J60_DropPacket(ENC28J60_Config *spi);
 
 #endif /* ENC28J60_DRIVER_H_ */

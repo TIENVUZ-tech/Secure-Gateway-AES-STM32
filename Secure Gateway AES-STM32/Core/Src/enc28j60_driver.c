@@ -61,7 +61,6 @@ uint8_t ENC28J60_ReadRegGlo(ENC28J60_Config *spi, uint8_t address) {
 }
 
 static void ENC28J60_WriteReg(ENC28J60_Config *spi, uint8_t address, uint8_t data) {
-
     ENC28J60_SetBank(spi, address);
     ENC28J60_WriteOp(spi, ENC28J60_WRITE_CTRL_REG, address, data);
 }
@@ -78,7 +77,7 @@ static void ENC28J60_WritePhy(ENC28J60_Config *spi, uint8_t address, uint16_t da
 }
 
 uint16_t ENC28J60_ReadPhy(ENC28J60_Config *spi, uint8_t address) {
-
+	spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 50) : osMutexWait(spi2_mutex, 50);
     ENC28J60_WriteReg(spi, MIREGADR, address);
     ENC28J60_WriteReg(spi, MICMD, MICMD_MIIRD);
 
@@ -91,10 +90,21 @@ uint16_t ENC28J60_ReadPhy(ENC28J60_Config *spi, uint8_t address) {
     uint16_t data = ENC28J60_ReadReg(spi, MIRDL);
     data |= (uint16_t)ENC28J60_ReadReg(spi, MIRDH) << 8;
 
+    spi->hspi->Instance == SPI1 ? osMutexRelease(spi1_mutex) : osMutexRelease(spi2_mutex);
     return data;
 }
 
+void ENC28J60_ClearErrors(ENC28J60_Config *spi) {
+	spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 50) : osMutexWait(spi2_mutex, 50);
+	if (ENC28J60_ReadReg(spi, EIR) & EIR_RXERIF) {
+		ENC28J60_WriteOp(spi, ENC28J60_BIT_FIELD_CLR, EIR, EIR_RXERIF);
+	}
+	spi->hspi->Instance == SPI1 ? osMutexRelease(spi1_mutex) : osMutexRelease(spi2_mutex);
+}
+
 void ENC28J60_Init(ENC28J60_Config *spi, uint8_t *mac_address) {
+	spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 50) : osMutexWait(spi2_mutex, 50);
+
     // Hardware Reset
     HAL_GPIO_WritePin(spi->RST_Port, spi->RST_Pin, GPIO_PIN_RESET);
     HAL_Delay(10);
@@ -166,6 +176,8 @@ void ENC28J60_Init(ENC28J60_Config *spi, uint8_t *mac_address) {
     // Enable interrupt: INTIE + PKTIE
     ENC28J60_WriteOp(spi, ENC28J60_BIT_FIELD_SET, EIE, EIE_INTIE | EIE_PKTIE);
 
+    spi->hspi->Instance == SPI1 ? osMutexRelease(spi1_mutex) : osMutexRelease(spi2_mutex);
+
 }
 
 void ENC28J60_SendPacket(ENC28J60_Config *spi, uint8_t *packet_data, uint16_t length) {
@@ -174,12 +186,12 @@ void ENC28J60_SendPacket(ENC28J60_Config *spi, uint8_t *packet_data, uint16_t le
     // Wait for the previous transmission to complete
     uint32_t t0 = HAL_GetTick();
     while (ENC28J60_ReadOp(spi, ENC28J60_READ_CTRL_REG, ECON1) & ECON1_TXRTS) {
-        if (ENC28J60_ReadReg(spi, EIR) & EIR_TXERIF) { // Transmit error interrupt flag bit
+        if (ENC28J60_ReadReg(spi, EIR) & EIR_TXERIF || (HAL_GetTick() - t0 > 10)) { // Transmit error interrupt flag bit
             ENC28J60_WriteOp(spi, ENC28J60_BIT_FIELD_SET, ECON1, ECON1_TXRST);
             ENC28J60_WriteOp(spi, ENC28J60_BIT_FIELD_CLR, ECON1, ECON1_TXRST);
             break;
         }
-        if (HAL_GetTick() - t0 > 10) break; // timeout 10ms
+        ENC28J60_WriteOp(spi, ENC28J60_BIT_FIELD_CLR, EIR, EIR_TXERIF | EIR_TXIF);
     }
 
     // Clear TX error from last time
@@ -327,4 +339,40 @@ release:
     spi->hspi->Instance == SPI1 ? osMutexRelease(spi1_mutex) : osMutexRelease(spi2_mutex);
 
     return length;
+}
+
+void ENC28J60_DropPacket(ENC28J60_Config *spi) {
+
+	spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 100) : osMutexWait(spi2_mutex, 100);
+
+	ENC28J60_WriteReg(spi, ERDPTL, spi->next_packet_ptr & 0xFF);
+	ENC28J60_WriteReg(spi, ERDPTH, spi->next_packet_ptr >> 8);
+	uint8_t header[2];
+	uint16_t next_packet_ptr;
+
+	HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_RESET);
+	uint8_t cmd = ENC28J60_READ_BUF_MEM;
+	HAL_SPI_Transmit(spi->hspi, &cmd, 1, 100);
+	HAL_SPI_Receive(spi->hspi, header, 2, 100);
+	next_packet_ptr = (uint16_t)header[0] | ((uint16_t)header[1] << 8);
+	HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_SET);
+
+	uint16_t erxrdpt = RX_END;
+	if (next_packet_ptr == RX_START) {
+		erxrdpt = RX_END;
+	} else if (next_packet_ptr > RX_START && next_packet_ptr <= RX_END) {
+		erxrdpt = next_packet_ptr - 1;
+	} else {
+		next_packet_ptr = RX_START;
+		erxrdpt = RX_START;
+	}
+
+	ENC28J60_WriteReg(spi, ERXRDPTL, erxrdpt & 0xFF);
+	ENC28J60_WriteReg(spi, ERXRDPTH, erxrdpt >> 8);
+
+	ENC28J60_WriteOp(spi, ENC28J60_BIT_FIELD_SET, ECON2, ECON2_PKTDEC);
+
+	spi->next_packet_ptr = next_packet_ptr;
+
+	spi->hspi->Instance == SPI1 ? osMutexRelease(spi1_mutex) : osMutexRelease(spi2_mutex);
 }
