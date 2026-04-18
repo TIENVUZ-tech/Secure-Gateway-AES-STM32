@@ -4086,7 +4086,7 @@ int main(void)
  8001c10:	6013      	str	r3, [r2, #0]
 
   /* definition and creation of vPacket_Processing_Task */
-  osThreadStaticDef(vPacket_Processing_Task, vPacket_Processing_TaskFunc, osPriorityHigh, 0, 512, vPacket_Processing_TaskBuffer, &vPacket_Processing_TaskControlBlock);
+  osThreadStaticDef(vPacket_Processing_Task, vPacket_Processing_TaskFunc, osPriorityAboveNormal, 0, 512, vPacket_Processing_TaskBuffer, &vPacket_Processing_TaskControlBlock);
  8001c12:	4b26      	ldr	r3, [pc, #152]	@ (8001cac <main+0x23c>)
  8001c14:	f107 041c 	add.w	r4, r7, #28
  8001c18:	461d      	mov	r5, r3
@@ -4497,36 +4497,36 @@ static void MX_DMA_Init(void)
 
   /* DMA interrupt init */
   /* DMA1_Channel2_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 5, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 6, 0);
  8001e76:	2200      	movs	r2, #0
- 8001e78:	2105      	movs	r1, #5
+ 8001e78:	2106      	movs	r1, #6
  8001e7a:	200c      	movs	r0, #12
  8001e7c:	f000 ff67 	bl	8002d4e <HAL_NVIC_SetPriority>
   HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
  8001e80:	200c      	movs	r0, #12
  8001e82:	f000 ff80 	bl	8002d86 <HAL_NVIC_EnableIRQ>
   /* DMA1_Channel3_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 6, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 7, 0);
  8001e86:	2200      	movs	r2, #0
- 8001e88:	2106      	movs	r1, #6
+ 8001e88:	2107      	movs	r1, #7
  8001e8a:	200d      	movs	r0, #13
  8001e8c:	f000 ff5f 	bl	8002d4e <HAL_NVIC_SetPriority>
   HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
  8001e90:	200d      	movs	r0, #13
  8001e92:	f000 ff78 	bl	8002d86 <HAL_NVIC_EnableIRQ>
   /* DMA1_Channel4_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 5, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 6, 0);
  8001e96:	2200      	movs	r2, #0
- 8001e98:	2105      	movs	r1, #5
+ 8001e98:	2106      	movs	r1, #6
  8001e9a:	200e      	movs	r0, #14
  8001e9c:	f000 ff57 	bl	8002d4e <HAL_NVIC_SetPriority>
   HAL_NVIC_EnableIRQ(DMA1_Channel4_IRQn);
  8001ea0:	200e      	movs	r0, #14
  8001ea2:	f000 ff70 	bl	8002d86 <HAL_NVIC_EnableIRQ>
   /* DMA1_Channel5_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 6, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 7, 0);
  8001ea6:	2200      	movs	r2, #0
- 8001ea8:	2106      	movs	r1, #6
+ 8001ea8:	2107      	movs	r1, #7
  8001eaa:	200f      	movs	r0, #15
  8001eac:	f000 ff4f 	bl	8002d4e <HAL_NVIC_SetPriority>
   HAL_NVIC_EnableIRQ(DMA1_Channel5_IRQn);
@@ -4703,18 +4703,18 @@ static void MX_GPIO_Init(void)
  8001fc6:	f001 f917 	bl	80031f8 <HAL_GPIO_Init>
 
   /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI0_IRQn, 5, 0);
+  HAL_NVIC_SetPriority(EXTI0_IRQn, 6, 0);
  8001fca:	2200      	movs	r2, #0
- 8001fcc:	2105      	movs	r1, #5
+ 8001fcc:	2106      	movs	r1, #6
  8001fce:	2006      	movs	r0, #6
  8001fd0:	f000 febd 	bl	8002d4e <HAL_NVIC_SetPriority>
   HAL_NVIC_EnableIRQ(EXTI0_IRQn);
  8001fd4:	2006      	movs	r0, #6
  8001fd6:	f000 fed6 	bl	8002d86 <HAL_NVIC_EnableIRQ>
 
-  HAL_NVIC_SetPriority(EXTI1_IRQn, 5, 0);
+  HAL_NVIC_SetPriority(EXTI1_IRQn, 6, 0);
  8001fda:	2200      	movs	r2, #0
- 8001fdc:	2105      	movs	r1, #5
+ 8001fdc:	2106      	movs	r1, #6
  8001fde:	2007      	movs	r0, #7
  8001fe0:	f000 feb5 	bl	8002d4e <HAL_NVIC_SetPriority>
   HAL_NVIC_EnableIRQ(EXTI1_IRQn);

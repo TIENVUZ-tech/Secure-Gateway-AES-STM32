@@ -252,7 +252,7 @@ int main(void)
   MX_DMA_Init();
   MX_SPI1_Init();
   MX_SPI2_Init();
-  // MX_IWDG_Init();
+  //MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -320,7 +320,7 @@ int main(void)
   vTX_TaskHandle = osThreadCreate(osThread(vTX_Task), NULL);
 
   /* definition and creation of vPacket_Processing_Task */
-  osThreadStaticDef(vPacket_Processing_Task, vPacket_Processing_TaskFunc, osPriorityHigh, 0, 512, vPacket_Processing_TaskBuffer, &vPacket_Processing_TaskControlBlock);
+  osThreadStaticDef(vPacket_Processing_Task, vPacket_Processing_TaskFunc, osPriorityAboveNormal, 0, 512, vPacket_Processing_TaskBuffer, &vPacket_Processing_TaskControlBlock);
   vPacket_Processing_TaskHandle = osThreadCreate(osThread(vPacket_Processing_Task), NULL);
 
   /* definition and creation of vHearbeat_Task */
@@ -505,16 +505,16 @@ static void MX_DMA_Init(void)
 
   /* DMA interrupt init */
   /* DMA1_Channel2_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 5, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 6, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
   /* DMA1_Channel3_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 6, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 7, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
   /* DMA1_Channel4_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 5, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 6, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel4_IRQn);
   /* DMA1_Channel5_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 6, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 7, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel5_IRQn);
 
 }
@@ -574,10 +574,10 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(NSS_SPI2_GPIO_Port, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI0_IRQn, 5, 0);
+  HAL_NVIC_SetPriority(EXTI0_IRQn, 6, 0);
   HAL_NVIC_EnableIRQ(EXTI0_IRQn);
 
-  HAL_NVIC_SetPriority(EXTI1_IRQn, 5, 0);
+  HAL_NVIC_SetPriority(EXTI1_IRQn, 6, 0);
   HAL_NVIC_EnableIRQ(EXTI1_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
