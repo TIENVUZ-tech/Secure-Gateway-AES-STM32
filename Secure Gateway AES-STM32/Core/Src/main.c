@@ -95,8 +95,10 @@ uint8_t xTX_QueueBuffer[ 4 * sizeof( uint32_t ) ];
 osStaticMessageQDef_t xTX_QueueControlBlock;
 /* USER CODE BEGIN PV */
 // Semaphore
-osSemaphoreId xSem_DMA_SPI1_Done;
-osSemaphoreId xSem_DMA_SPI2_Done;
+osSemaphoreId xSem_DMA_SPI1_RX_Done;
+osSemaphoreId xSem_DMA_SPI2_RX_Done;
+osSemaphoreId xSem_DMA_SPI1_TX_Done;
+osSemaphoreId xSem_DMA_SPI2_TX_Done;
 osSemaphoreId xSem_INT_SPI1;
 osSemaphoreId xSem_INT_SPI2;
 
@@ -211,10 +213,10 @@ void Update_Ip_Checksum(PacketBuffer *packet, uint8_t ip_header_length) {
 void User_Init() {
 	// Initialize ENC28J60 1 and 2
 	ENC28J60_Init(&spi1, mac1_addr);
-	HAL_IWDG_Refresh(&hiwdg);
+//	HAL_IWDG_Refresh(&hiwdg);
 
 	ENC28J60_Init(&spi2, mac2_addr);
-	HAL_IWDG_Refresh(&hiwdg);
+//	HAL_IWDG_Refresh(&hiwdg);
 
 	BufferPool_Init();
 }
@@ -274,13 +276,17 @@ int main(void)
   /* USER CODE END RTOS_MUTEX */
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
-  osSemaphoreDef(xSem_DMA_SPI1_Done_Def);
-  osSemaphoreDef(xSem_DMA_SPI2_Done_Def);
+  osSemaphoreDef(xSem_DMA_SPI1_RX_Done_Def);
+  osSemaphoreDef(xSem_DMA_SPI2_RX_Done_Def);
+  osSemaphoreDef(xSem_DMA_SPI1_TX_Done_Def);
+  osSemaphoreDef(xSem_DMA_SPI2_TX_Done_Def);
   osSemaphoreDef(xSem_INT_SPI1_Def);
   osSemaphoreDef(xSem_INT_SPI2_Def);
 
-  xSem_DMA_SPI1_Done = osSemaphoreCreate(osSemaphore(xSem_DMA_SPI1_Done_Def), 1);
-  xSem_DMA_SPI2_Done = osSemaphoreCreate(osSemaphore(xSem_DMA_SPI2_Done_Def), 1);
+  xSem_DMA_SPI1_RX_Done = osSemaphoreCreate(osSemaphore(xSem_DMA_SPI1_RX_Done_Def), 1);
+  xSem_DMA_SPI2_RX_Done = osSemaphoreCreate(osSemaphore(xSem_DMA_SPI2_RX_Done_Def), 1);
+  xSem_DMA_SPI1_TX_Done = osSemaphoreCreate(osSemaphore(xSem_DMA_SPI1_TX_Done_Def), 1);
+  xSem_DMA_SPI2_TX_Done = osSemaphoreCreate(osSemaphore(xSem_DMA_SPI2_TX_Done_Def), 1);
   xSem_INT_SPI1 = osSemaphoreCreate(osSemaphore(xSem_INT_SPI1_Def), 1);
   xSem_INT_SPI2 = osSemaphoreCreate(osSemaphore(xSem_INT_SPI2_Def), 1);
   /* USER CODE END RTOS_SEMAPHORES */
@@ -635,7 +641,7 @@ void vRX_SPI1_TaskFunc(void const * argument)
 	   * Because the ENC28J60 only sends an interrupt even if there are many packets
 	   */
 	  uint8_t rx_count = 0;
-	  while ((ENC28J60_ReadRegGlo(&spi1, EPKTCNT) > 0) && rx_count < 6) {
+	  while ((ENC28J60_ReadRegGlo(&spi1, EPKTCNT) > 0) && rx_count < 3) {
 		  RX_HandlePacket(&spi1, 1);
 		  rx_count++;
 	  }
@@ -668,7 +674,7 @@ void vRX_SPI2_TaskFunc(void const * argument)
 	  osSemaphoreWait(xSem_INT_SPI2, 50);
 
 	  uint8_t rx_count = 0;
-	  while ((ENC28J60_ReadRegGlo(&spi2, EPKTCNT) > 0) && rx_count < 6) {
+	  while ((ENC28J60_ReadRegGlo(&spi2, EPKTCNT) > 0) && rx_count < 3) {
 		  RX_HandlePacket(&spi2, 2);
 		  rx_count++;
 	  }
@@ -827,7 +833,7 @@ void vPacket_Processing_TaskFunc(void const * argument)
 		  // Step 3: Encrypt payload
 //		  uint8_t iv[16] = {0}; // static Initialization Vector
 //		  AES_init_ctx_iv(&ctx, found_key, iv);
-//		  AES_ctx_set_iv(&precomputed_ctx[found_key_index], iv);
+		  AES_ctx_set_iv(&precomputed_ctx[found_key_index], iv);
 		  AES_CBC_PKCS7_Encrypt(&precomputed_ctx[found_key_index], packet, udp_payload_offset);
 
 		  // Step 4: Recalculate checksum and length

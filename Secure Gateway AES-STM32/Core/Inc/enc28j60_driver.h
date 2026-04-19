@@ -141,8 +141,10 @@
 #define MAX_FRAME_LEN   598      // 512 payload + 86 header
 
 // extern Semaphore
-extern osSemaphoreId xSem_DMA_SPI1_Done;
-extern osSemaphoreId xSem_DMA_SPI2_Done;
+extern osSemaphoreId xSem_DMA_SPI1_RX_Done;
+extern osSemaphoreId xSem_DMA_SPI2_RX_Done;
+extern osSemaphoreId xSem_DMA_SPI1_TX_Done;
+extern osSemaphoreId xSem_DMA_SPI2_TX_Done;
 extern osMutexId spi1_mutex;
 extern osMutexId spi2_mutex;
 

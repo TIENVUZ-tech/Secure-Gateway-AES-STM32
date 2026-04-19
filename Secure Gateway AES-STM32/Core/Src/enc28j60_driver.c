@@ -111,7 +111,7 @@ void ENC28J60_ClearErrors(ENC28J60_Config *spi) {
 }
 
 void ENC28J60_Init(ENC28J60_Config *spi, uint8_t *mac_address) {
-	osStatus status = spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 5) : osMutexWait(spi2_mutex, 5);
+	osStatus status = spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 10) : osMutexWait(spi2_mutex, 10);
 	if (status != osOK) {
 		return;
 	}
@@ -220,9 +220,9 @@ void ENC28J60_SendPacket(ENC28J60_Config *spi, uint8_t *packet_data, uint16_t le
     HAL_SPI_Transmit(spi->hspi, &cmd, 1, 5);
     HAL_SPI_Transmit(spi->hspi, &ctrl, 1, 5);
     if (spi->hspi->Instance == SPI1) {
-    	while (osSemaphoreWait(xSem_DMA_SPI1_Done, 0) == osOK); // Clear old semaphore
+    	while (osSemaphoreWait(xSem_DMA_SPI1_TX_Done, 0) == osOK); // Clear old semaphore
     	HAL_SPI_Transmit_DMA(spi->hspi, packet_data, length);
-    	if (osSemaphoreWait(xSem_DMA_SPI1_Done, 5) != osOK) {
+    	if (osSemaphoreWait(xSem_DMA_SPI1_TX_Done, 5) != osOK) {
     		HAL_SPI_DMAStop(spi->hspi);
     		HAL_SPI_Abort(spi->hspi);
     		HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_SET);
@@ -230,9 +230,9 @@ void ENC28J60_SendPacket(ENC28J60_Config *spi, uint8_t *packet_data, uint16_t le
     		return;
     	}
     } else {
-    	while (osSemaphoreWait(xSem_DMA_SPI2_Done, 0) == osOK);
+    	while (osSemaphoreWait(xSem_DMA_SPI2_TX_Done, 0) == osOK);
     	HAL_SPI_Transmit_DMA(spi->hspi, packet_data, length);
-    	if (osSemaphoreWait(xSem_DMA_SPI2_Done, 5) != osOK) {
+    	if (osSemaphoreWait(xSem_DMA_SPI2_TX_Done, 5) != osOK) {
     		HAL_SPI_DMAStop(spi->hspi);
     		HAL_SPI_Abort(spi->hspi);
     		HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_SET);
@@ -301,9 +301,9 @@ uint16_t ENC28J60_ReceivePacket(ENC28J60_Config *spi, uint8_t *pBuffer, uint16_t
 
     // Receive payload
     if (spi->hspi->Instance == SPI1) {
-    	while (osSemaphoreWait(xSem_DMA_SPI1_Done, 0) == osOK);
+    	while (osSemaphoreWait(xSem_DMA_SPI1_RX_Done, 0) == osOK);
     	HAL_SPI_Receive_DMA(spi->hspi, pBuffer, len);
-    	if (osSemaphoreWait(xSem_DMA_SPI1_Done, 5) != osOK) {
+    	if (osSemaphoreWait(xSem_DMA_SPI1_RX_Done, 5) != osOK) {
     		HAL_SPI_DMAStop(spi->hspi);
     		HAL_SPI_Abort(spi->hspi);
     		HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_SET);
@@ -318,9 +318,9 @@ uint16_t ENC28J60_ReceivePacket(ENC28J60_Config *spi, uint8_t *pBuffer, uint16_t
     		return 0;
     	}
     } else {
-    	while (osSemaphoreWait(xSem_DMA_SPI2_Done, 0) == osOK);
+    	while (osSemaphoreWait(xSem_DMA_SPI2_RX_Done, 0) == osOK);
     	HAL_SPI_Receive_DMA(spi->hspi, pBuffer, len);
-    	if (osSemaphoreWait(xSem_DMA_SPI2_Done, 5) != osOK) {
+    	if (osSemaphoreWait(xSem_DMA_SPI2_RX_Done, 5) != osOK) {
     		HAL_SPI_DMAStop(spi->hspi);
     		HAL_SPI_Abort(spi->hspi);
     		HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_SET);
