@@ -797,6 +797,10 @@ void vPacket_Processing_TaskFunc(void const * argument)
 
 		  // Read IHL (Internet Header Length)
 		  uint8_t ip_header_length = (packet->data[14] & 0x0F) * 4;
+		  if (ip_header_length < 20) {
+			  BufferPool_Release(packet);
+			  continue;
+		  }
 		  // Calculate the length of UDP header (Ethernet header (14), IP header, UDP header)
 		  uint16_t udp_payload_offset = 14 + ip_header_length + 8;
 

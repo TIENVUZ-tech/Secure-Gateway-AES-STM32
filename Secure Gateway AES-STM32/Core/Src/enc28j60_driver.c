@@ -117,9 +117,9 @@ void ENC28J60_Init(ENC28J60_Config *spi, uint8_t *mac_address) {
 	}
     // Hardware Reset
     HAL_GPIO_WritePin(spi->RST_Port, spi->RST_Pin, GPIO_PIN_RESET);
-    HAL_Delay(10);
+    osDelay(1);
     HAL_GPIO_WritePin(spi->RST_Port, spi->RST_Pin, GPIO_PIN_SET);
-    HAL_Delay(10);
+    osDelay(1);
 
     // Soft Reset
     HAL_GPIO_WritePin(spi->NSS_Port, spi->NSS_Pin, GPIO_PIN_RESET);
@@ -151,7 +151,7 @@ void ENC28J60_Init(ENC28J60_Config *spi, uint8_t *mac_address) {
     // MACON2=0 (take the MAC out of reset
     ENC28J60_WriteReg(spi, MACON2, 0x00);
     // Auto-padding 60B + CRC + frame length check
-    ENC28J60_WriteOp(spi, ENC28J60_BIT_FIELD_SET, MACON3, MACON3_PADCFG0 | MACON3_TXCRCEN | MACON3_FRMLNEN);
+    ENC28J60_WriteOp(spi, ENC28J60_BIT_FIELD_SET, MACON3, MACON3_PADCFG0 | MACON3_TXCRCEN | MACON3_FRMLNEN | MACON3_FULDPX);
 
     // Max frame = 598 bytes
     ENC28J60_WriteReg(spi, MAMXFLL, MAX_FRAME_LEN & 0xFF);
