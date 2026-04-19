@@ -25,11 +25,10 @@ Hệ thống được xây dựng trên nền tảng **FreeRTOS** với kiến t
 * **Xử lý mạng:** Nhận gói tin Ethernet thô, bóc tách IP/UDP Header, định tuyến tĩnh giữa 2 phân vùng mạng.
 * **Bảo mật:** Mã hóa Payload UDP bằng AES-128-CBC với cơ chế đệm PKCS#7.
 * **Độ tin cậy:** Giám sát đa nhiệm bằng **Independent Watchdog (IWDG)** và cơ chế tự phục hồi lỗi kết nối vật lý (Link Status).
-* **Hiệu năng:** Độ trễ xử lý gói tin **< 5ms**, thông lượng thực tế duy trì ổn định ở mức **50 gói/giây**.
 
 ---
 
-## 🛠️ Cấu hình Phần cứng (Hardware)
+## Cấu hình Phần cứng (Hardware)
 
 | Thành phần | Chi tiết |
 | :--- | :--- |
