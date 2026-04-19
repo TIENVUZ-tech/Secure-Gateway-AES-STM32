@@ -13,6 +13,6 @@
 ../Core/Src/main.c:655:6:vRX_SPI2_TaskFunc	24	static
 ../Core/Src/main.c:689:6:vTX_TaskFunc	32	static
 ../Core/Src/main.c:727:6:vPacket_Processing_TaskFunc	464	static
-../Core/Src/main.c:851:6:vHeartbeat_TaskFunc	24	static
-../Core/Src/main.c:915:6:HAL_TIM_PeriodElapsedCallback	16	static
-../Core/Src/main.c:933:6:Error_Handler	4	static,ignoring_inline_asm
+../Core/Src/main.c:852:6:vHeartbeat_TaskFunc	24	static
+../Core/Src/main.c:921:6:HAL_TIM_PeriodElapsedCallback	16	static
+../Core/Src/main.c:939:6:Error_Handler	4	static,ignoring_inline_asm

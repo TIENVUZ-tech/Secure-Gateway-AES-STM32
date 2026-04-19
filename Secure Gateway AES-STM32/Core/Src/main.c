@@ -155,7 +155,7 @@ void RX_HandlePacket(ENC28J60_Config *spi, uint8_t source_spi) {
 
 	// Read the packet from ENC28J60 to buffer
 	uint16_t length = ENC28J60_ReceivePacket(spi, buffer->data, BUFFER_SIZE);
-	if (length < 42) {
+	if (length < 64) {
 		BufferPool_Release(buffer);
 		return;
 	}
@@ -766,6 +766,7 @@ void vPacket_Processing_TaskFunc(void const * argument)
 		      continue;
 		  } else if (ethernet_type == 0x0800) { // IPv4
 			  uint16_t real_ip_length = (packet->data[16] << 8) | packet->data[17];
+
 			  if (14 + real_ip_length < packet->length) {
 				  packet->length = 14 + real_ip_length;
 			  }
@@ -826,7 +827,7 @@ void vPacket_Processing_TaskFunc(void const * argument)
 		  // Step 3: Encrypt payload
 //		  uint8_t iv[16] = {0}; // static Initialization Vector
 //		  AES_init_ctx_iv(&ctx, found_key, iv);
-		  AES_ctx_set_iv(&precomputed_ctx[found_key_index], iv);
+//		  AES_ctx_set_iv(&precomputed_ctx[found_key_index], iv);
 		  AES_CBC_PKCS7_Encrypt(&precomputed_ctx[found_key_index], packet, udp_payload_offset);
 
 		  // Step 4: Recalculate checksum and length
@@ -872,6 +873,9 @@ void vHeartbeat_TaskFunc(void const * argument)
 	  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
 	  HAL_IWDG_Refresh(&hiwdg);
 
+	  ENC28J60_ReadPhy(&spi1, PHSTAT1);
+	  osDelay(2);
+
 	  // Monitor the Link status of Module 1 (SPI1)
 	  uint16_t phstat1_1 = ENC28J60_ReadPhy(&spi1, PHSTAT1);
 	  if (!(phstat1_1 & PHSTAT1_LLSTAT)) { // Link down
@@ -885,6 +889,8 @@ void vHeartbeat_TaskFunc(void const * argument)
 		  link_down_count_spi1 = 0; // Link up
 	  }
 
+	  ENC28J60_ReadPhy(&spi2, PHSTAT1);
+	  osDelay(2);
 
 	  // Monitor the Link status of Module 2 (SPI2)
 	  uint16_t phstat1_2 = ENC28J60_ReadPhy(&spi2, PHSTAT1);

@@ -81,7 +81,7 @@ static void ENC28J60_WritePhy(ENC28J60_Config *spi, uint8_t address, uint16_t da
 uint16_t ENC28J60_ReadPhy(ENC28J60_Config *spi, uint8_t address) {
 	osStatus status = spi->hspi->Instance == SPI1 ? osMutexWait(spi1_mutex, 5) : osMutexWait(spi2_mutex, 5);
     if (status != osOK) {
-    	return 0;
+    	return 0xFFFF;
     }
 	ENC28J60_WriteReg(spi, MIREGADR, address);
     ENC28J60_WriteReg(spi, MICMD, MICMD_MIIRD);
