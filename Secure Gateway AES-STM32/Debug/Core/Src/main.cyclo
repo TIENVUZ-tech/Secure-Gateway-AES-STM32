@@ -14,5 +14,5 @@
 ../Core/Src/main.c:695:6:vTX_TaskFunc	5
 ../Core/Src/main.c:733:6:vPacket_Processing_TaskFunc	21
 ../Core/Src/main.c:858:6:vHeartbeat_TaskFunc	6
-../Core/Src/main.c:927:6:HAL_TIM_PeriodElapsedCallback	2
-../Core/Src/main.c:945:6:Error_Handler	1
+../Core/Src/main.c:920:6:HAL_TIM_PeriodElapsedCallback	2
+../Core/Src/main.c:938:6:Error_Handler	1

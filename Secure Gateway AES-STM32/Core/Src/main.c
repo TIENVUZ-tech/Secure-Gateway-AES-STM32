@@ -877,10 +877,6 @@ void vHeartbeat_TaskFunc(void const * argument)
 
 	  // Blink heart led (PC13)
 	  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
-	  HAL_IWDG_Refresh(&hiwdg);
-
-	  ENC28J60_ReadPhy(&spi1, PHSTAT1);
-	  osDelay(2);
 
 	  // Monitor the Link status of Module 1 (SPI1)
 	  uint16_t phstat1_1 = ENC28J60_ReadPhy(&spi1, PHSTAT1);
@@ -894,9 +890,6 @@ void vHeartbeat_TaskFunc(void const * argument)
 	  } else {
 		  link_down_count_spi1 = 0; // Link up
 	  }
-
-	  ENC28J60_ReadPhy(&spi2, PHSTAT1);
-	  osDelay(2);
 
 	  // Monitor the Link status of Module 2 (SPI2)
 	  uint16_t phstat1_2 = ENC28J60_ReadPhy(&spi2, PHSTAT1);

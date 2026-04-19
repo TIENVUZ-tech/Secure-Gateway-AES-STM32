@@ -384,7 +384,7 @@ void ENC28J60_DropPacket(ENC28J60_Config *spi) {
 		erxrdpt = next_packet_ptr - 1;
 	} else {
 		next_packet_ptr = RX_START;
-		erxrdpt = RX_START;
+		erxrdpt = RX_END;
 	}
 
 	ENC28J60_WriteReg(spi, ERXRDPTL, erxrdpt & 0xFF);
