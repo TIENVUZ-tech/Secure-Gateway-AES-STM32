@@ -34,12 +34,13 @@ PacketBuffer* BufferPool_Acquire() {
 void BufferPool_Release(PacketBuffer* buffer) {
 	if (buffer == NULL) return;
 
-	osMutexWait(pool_mutex, osWaitForever);
-	for (int i = 0; i < BUFFER_COUNT; i++) {
-		if (buffer == &pool_buffers[i]) {
-			pool_status[i] = BUFFER_FREE;
-			break;
-		}
+	intptr_t index = buffer - pool_buffers;
+
+	if (index >= 0 && index < BUFFER_COUNT) {
+		osMutexWait(pool_mutex, osWaitForever);
+		pool_buffers[index].length = 0;
+		pool_buffers[index].source_spi = 0;
+		pool_status[index] = BUFFER_FREE;
+		osMutexRelease(pool_mutex);
 	}
-	osMutexRelease(pool_mutex);
 }

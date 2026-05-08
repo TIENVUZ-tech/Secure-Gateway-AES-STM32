@@ -47,7 +47,6 @@
 
 // Bank 2 (MAC/MII — bit 7 = need dummy byte)
 #define MACON1   (0x00|0x40|0x80)
-#define MACON2   (0x01|0x40|0x80)
 #define MACON3   (0x02|0x40|0x80)
 #define MABBIPG  (0x04|0x40|0x80)
 #define MAIPGL   (0x06|0x40|0x80)
@@ -143,8 +142,8 @@
 // extern Semaphore
 extern osSemaphoreId xSem_DMA_SPI1_Done;
 extern osSemaphoreId xSem_DMA_SPI2_Done;
-extern osMutexId spi1_mutex;
-extern osMutexId spi2_mutex;
+extern SPI_HandleTypeDef hspi1;
+extern SPI_HandleTypeDef hspi2;
 
 // Configure structure
 typedef struct {
@@ -157,45 +156,40 @@ typedef struct {
     uint8_t current_bank; // Store the current register bank
 } ENC28J60_Config;
 
-/*
 // Read Control Register Command
-uint8_t ENC28J60_ReadOp (ENC28J60_Config *spi, uint8_t opcode, uint8_t address);
+uint8_t ENC28J60_ReadOp (ENC28J60_Config *dev, uint8_t opcode, uint8_t address);
 
 // Write Control Register Command
-void ENC28J60_WriteOp (ENC28J60_Config *spi, uint8_t opcode, uint8_t address, uint8_t data);
+void ENC28J60_WriteOp (ENC28J60_Config *dev, uint8_t opcode, uint8_t address, uint8_t data);
 
 // Set Bank
-void ENC28J60_SetBank (ENC28J60_Config *spi, uint8_t address);
+void ENC28J60_SetBank (ENC28J60_Config *dev, uint8_t address);
 
 // Read a register
-uint8_t ENC28J60_ReadReg (ENC28J60_Config *spi, uint8_t address);
+uint8_t ENC28J60_ReadReg (ENC28J60_Config *dev, uint8_t address);
 
 // Write data into a register
-void ENC28J60_WriteReg (ENC28J60_Config *spi, uint8_t address, uint8_t data);
+void ENC28J60_WriteReg (ENC28J60_Config *dev, uint8_t address, uint8_t data);
 
 // Write data into a PHY register
-void ENC28J60_WritePhy (ENC28J60_Config *spi, uint8_t address, uint16_t data);
-*/
-
-// Read a register
-uint8_t ENC28J60_ReadRegGlo (ENC28J60_Config *spi, uint8_t address);
+void ENC28J60_WritePhy (ENC28J60_Config *dev, uint8_t address, uint16_t data);
 
 // Read data from a PHY register
-uint16_t ENC28J60_ReadPhy (ENC28J60_Config *spi, uint8_t address);
+uint16_t ENC28J60_ReadPhy (ENC28J60_Config *dev, uint8_t address);
 
 // Clear Receive Error Interrupt Flag bit
-void ENC28J60_ClearErrors(ENC28J60_Config *spi);
+void ENC28J60_ClearErrors(ENC28J60_Config *dev);
 
 // Initialize ENC28J60
-void ENC28J60_Init (ENC28J60_Config *spi, uint8_t *mac_address);
+uint8_t ENC28J60_Init (ENC28J60_Config *dev, uint8_t *mac_address);
 
 // Send a packet
-void ENC28J60_SendPacket (ENC28J60_Config *spi, uint8_t *packet_data, uint16_t length);
+uint8_t ENC28J60_SendPacket (ENC28J60_Config *dev, uint8_t *packet_data, uint16_t length);
 
 // Receive a packet
-uint16_t ENC28J60_ReceivePacket (ENC28J60_Config *spi, uint8_t *pBuffer, uint16_t max_length);
+uint16_t ENC28J60_ReceivePacket (ENC28J60_Config *dev, uint8_t *pBuffer, uint16_t max_length);
 
 // Drop a packet
-void ENC28J60_DropPacket(ENC28J60_Config *spi);
+void ENC28J60_DropPacket(ENC28J60_Config *dev);
 
 #endif /* ENC28J60_DRIVER_H_ */

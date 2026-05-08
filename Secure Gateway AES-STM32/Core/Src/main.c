@@ -40,8 +40,8 @@ typedef struct {
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 const IP_Key_Map key_table[] = {
-		{{10, 0, 0, 10}, {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F}},
-		{{10, 0, 0, 20}, {0x00, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xA0, 0xB0, 0xC0, 0xD0, 0xE0, 0xF0}}
+		{{192, 168, 5, 2}, {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F}},
+		{{192, 168, 5, 10}, {0x00, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xA0, 0xB0, 0xC0, 0xD0, 0xE0, 0xF0}}
 };
 
 #define KEY_TABLE_SIZE (sizeof(key_table)/sizeof(IP_Key_Map))
@@ -51,9 +51,10 @@ const IP_Key_Map key_table[] = {
 #define TASK_ALIVE_RX1 (1 << 0)
 #define TASK_ALIVE_RX2 (1 << 1)
 #define TASK_ALIVE_AES (1 << 2)
-#define TASK_ALIVE_TX  (1 << 3)
+#define TASK_ALIVE_TX1 (1 << 3)
+#define TASK_ALIVE_TX2 (1 << 4)
 
- #define TASK_ALIVE_ALL (TASK_ALIVE_RX1 | TASK_ALIVE_RX2 | TASK_ALIVE_AES | TASK_ALIVE_TX)
+ #define TASK_ALIVE_ALL (TASK_ALIVE_RX1 | TASK_ALIVE_RX2 | TASK_ALIVE_AES | TASK_ALIVE_TX1 | TASK_ALIVE_TX2)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -62,7 +63,7 @@ const IP_Key_Map key_table[] = {
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-IWDG_HandleTypeDef hiwdg;
+//IWDG_HandleTypeDef hiwdg;
 
 SPI_HandleTypeDef hspi1;
 SPI_HandleTypeDef hspi2;
@@ -78,7 +79,7 @@ osStaticThreadDef_t vRX_SPI1_TaskControlBlock;
 osThreadId vRX_SPI2_TaskHandle;
 uint32_t vRX_SPI2_TaskBuffer[ 256 ];
 osStaticThreadDef_t vRX_SPI2_TaskControlBlock;
-osThreadId vTX_TaskHandle;
+osThreadId vTX_SPI1_TaskHandle;
 uint32_t vTX_TaskBuffer[ 256 ];
 osStaticThreadDef_t vTX_TaskControlBlock;
 osThreadId vPacket_Processing_TaskHandle;
@@ -87,12 +88,18 @@ osStaticThreadDef_t vPacket_Processing_TaskControlBlock;
 osThreadId vHearbeat_TaskHandle;
 uint32_t vHearbeat_TaskBuffer[ 128 ];
 osStaticThreadDef_t vHearbeat_TaskControlBlock;
+osThreadId vTX_SPI2_TaskHandle;
+uint32_t vTX_SPI2_TaskBuffer[ 256 ];
+osStaticThreadDef_t vTX_SPI2_TaskControlBlock;
 osMessageQId xRX_QueueHandle;
 uint8_t xRX_QueueBuffer[ 6 * sizeof( uint32_t ) ];
 osStaticMessageQDef_t xRX_QueueControlBlock;
-osMessageQId xTX_QueueHandle;
-uint8_t xTX_QueueBuffer[ 4 * sizeof( uint32_t ) ];
-osStaticMessageQDef_t xTX_QueueControlBlock;
+osMessageQId xTX_SPI1_QueueHandle;
+uint8_t xTX_SPI1_QueueBuffer[ 2 * sizeof( uint32_t ) ];
+osStaticMessageQDef_t xTX_SPI1_QueueControlBlock;
+osMessageQId xTX_SPI2_QueueHandle;
+uint8_t xTX_SPI2_QueueBuffer[ 2 * sizeof( uint32_t ) ];
+osStaticMessageQDef_t xTX_SPI2_QueueControlBlock;
 /* USER CODE BEGIN PV */
 // Semaphore
 osSemaphoreId xSem_DMA_SPI1_Done;
@@ -101,8 +108,8 @@ osSemaphoreId xSem_INT_SPI1;
 osSemaphoreId xSem_INT_SPI2;
 
 // Mutex
-osMutexId spi1_mutex;
-osMutexId spi2_mutex;
+osMutexId dev1_mutex;
+osMutexId dev2_mutex;
 osMutexId pool_mutex;
 
 // Alive flag
@@ -116,45 +123,49 @@ static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_SPI2_Init(void);
-static void MX_IWDG_Init(void);
+//static void MX_IWDG_Init(void);
 void StartDefaultTask(void const * argument);
 void vRX_SPI1_TaskFunc(void const * argument);
 void vRX_SPI2_TaskFunc(void const * argument);
-void vTX_TaskFunc(void const * argument);
+void vTX_SPI1_TaskFunc(void const * argument);
 void vPacket_Processing_TaskFunc(void const * argument);
 void vHeartbeat_TaskFunc(void const * argument);
+void vTX_SPI2_TaskFunc(void const * argument);
 
 /* USER CODE BEGIN PFP */
-void RX_HandlePacket(ENC28J60_Config *spi, uint8_t source_spi);
+void RX_HandlePacket(ENC28J60_Config *dev, uint8_t source_dev);
 void Update_Ip_Checksum(PacketBuffer *packet, uint8_t ip_header_length);
 void User_Init(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-extern ENC28J60_Config spi1;
-extern ENC28J60_Config spi2;
+extern ENC28J60_Config dev1;
+extern ENC28J60_Config dev2;
 
 // Local MAC address
 uint8_t mac1_addr[6] = {0x02, 0x00, 0x00, 0x00, 0x00, 0x01};
 uint8_t mac2_addr[6] = {0x02, 0x00, 0x00, 0x00, 0x00, 0x02};
 
-uint8_t link_down_count_spi1 = 0;
-uint8_t link_down_count_spi2 = 0;
+uint8_t link_down_count_dev1 = 0;
+uint8_t link_down_count_dev2 = 0;
 
-void RX_HandlePacket(ENC28J60_Config *spi, uint8_t source_spi) {
+void RX_HandlePacket(ENC28J60_Config *dev, uint8_t source_spi) {
 	// Request buffer from pool (if the pool is full, skip packet)
 	PacketBuffer *buffer = BufferPool_Acquire();
 	if (buffer == NULL) {
 		// Read and discard packet from the chip
-//		static uint8_t packet[BUFFER_SIZE];
-//		ENC28J60_ReceivePacket(spi, packet, BUFFER_SIZE);
-		ENC28J60_DropPacket(spi);
+		ENC28J60_DropPacket(dev);
 		return;
 	}
 
 	// Read the packet from ENC28J60 to buffer
-	uint16_t length = ENC28J60_ReceivePacket(spi, buffer->data, BUFFER_SIZE);
+	uint16_t length = ENC28J60_ReceivePacket(dev, buffer->data, 598);
+
+	if (length < 60 || length > BUFFER_SIZE) {
+		BufferPool_Release(buffer);
+		return;
+	}
 
 	// Write metadata into buffer
 	buffer->length = length;
@@ -171,13 +182,13 @@ void Update_Ip_Checksum(PacketBuffer *packet, uint8_t ip_header_length) {
 	  uint16_t udp_length = packet->length - 14 - ip_header_length;
 	  uint16_t udp_length_offset = 14 + ip_header_length + 4;
 	  // Update UDP Length
-	  packet->data[udp_length_offset] = (udp_length >> 8) & 0xFF;
-	  packet->data[udp_length_offset + 1] = udp_length & 0xFF;
+	  packet->data[udp_length_offset] = (uint8_t)((udp_length >> 8) & 0xFF);
+	  packet->data[udp_length_offset + 1] = (uint8_t)(udp_length & 0xFF);
 
 	  // Update the new total length into the header (offset 16-17)
 	  uint16_t total_length = packet->length - 14; // Skip Ethernet header
-	  packet->data[16] = (total_length >> 8) & 0xFF;
-	  packet->data[17] = total_length & 0xFF;
+	  packet->data[16] = (uint8_t)((total_length >> 8) & 0xFF);
+	  packet->data[17] = (uint8_t)(total_length & 0xFF);
 
 	  // Remove the old Checksum (offset 24-25)
 	  packet->data[24] = 0x00;
@@ -185,8 +196,7 @@ void Update_Ip_Checksum(PacketBuffer *packet, uint8_t ip_header_length) {
 
 	  // Calculate sum (16-bit)
 	  uint32_t sum = 0;
-	  uint16_t ip_header_end = ip_header_length + 14;
-	  for (int i = 14; i < ip_header_end; i += 2) {
+	  for (int i = 14; i < 14 + ip_header_length; i += 2) {
 		  sum += (packet->data[i] << 8) | packet->data[i + 1];
 	  }
 
@@ -206,11 +216,13 @@ void Update_Ip_Checksum(PacketBuffer *packet, uint8_t ip_header_length) {
 
 void User_Init() {
 	// Initialize ENC28J60 1 and 2
-	ENC28J60_Init(&spi1, mac1_addr);
-	HAL_IWDG_Refresh(&hiwdg);
+	while (ENC28J60_Init(&dev1, mac1_addr) == 0) {
+		osDelay(100);
+	}
 
-	ENC28J60_Init(&spi2, mac2_addr);
-	HAL_IWDG_Refresh(&hiwdg);
+	while (ENC28J60_Init(&dev2, mac2_addr) == 0) {
+		osDelay(100);
+	}
 
 	BufferPool_Init();
 }
@@ -248,25 +260,20 @@ int main(void)
   MX_DMA_Init();
   MX_SPI1_Init();
   MX_SPI2_Init();
-  // MX_IWDG_Init();
+//  MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
-  osMutexDef(spi1_mutex_def);
-  osMutexDef(spi2_mutex_def);
+  osMutexDef(dev1_mutex_def);
+  osMutexDef(dev2_mutex_def);
   osMutexDef(pool_mutex_def);
 
-  spi1_mutex = osMutexCreate(osMutex(spi1_mutex_def));
-  spi2_mutex = osMutexCreate(osMutex(spi2_mutex_def));
+  dev1_mutex = osMutexCreate(osMutex(dev1_mutex_def));
+  dev2_mutex = osMutexCreate(osMutex(dev2_mutex_def));
   pool_mutex = osMutexCreate(osMutex(pool_mutex_def));
-
-  // Mutex protects concurrent access
-
-
-  // Define static muxtex
   /* USER CODE END RTOS_MUTEX */
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
@@ -290,9 +297,13 @@ int main(void)
   osMessageQStaticDef(xRX_Queue, 6, uint32_t, xRX_QueueBuffer, &xRX_QueueControlBlock);
   xRX_QueueHandle = osMessageCreate(osMessageQ(xRX_Queue), NULL);
 
-  /* definition and creation of xTX_Queue */
-  osMessageQStaticDef(xTX_Queue, 4, uint32_t, xTX_QueueBuffer, &xTX_QueueControlBlock);
-  xTX_QueueHandle = osMessageCreate(osMessageQ(xTX_Queue), NULL);
+  /* definition and creation of xTX_SPI1_Queue */
+  osMessageQStaticDef(xTX_SPI1_Queue, 2, uint32_t, xTX_SPI1_QueueBuffer, &xTX_SPI1_QueueControlBlock);
+  xTX_SPI1_QueueHandle = osMessageCreate(osMessageQ(xTX_SPI1_Queue), NULL);
+
+  /* definition and creation of xTX_SPI2_Queue */
+  osMessageQStaticDef(xTX_SPI2_Queue, 2, uint32_t, xTX_SPI2_QueueBuffer, &xTX_SPI2_QueueControlBlock);
+  xTX_SPI2_QueueHandle = osMessageCreate(osMessageQ(xTX_SPI2_Queue), NULL);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
@@ -311,9 +322,9 @@ int main(void)
   osThreadStaticDef(vRX_SPI2_Task, vRX_SPI2_TaskFunc, osPriorityHigh, 0, 256, vRX_SPI2_TaskBuffer, &vRX_SPI2_TaskControlBlock);
   vRX_SPI2_TaskHandle = osThreadCreate(osThread(vRX_SPI2_Task), NULL);
 
-  /* definition and creation of vTX_Task */
-  osThreadStaticDef(vTX_Task, vTX_TaskFunc, osPriorityAboveNormal, 0, 256, vTX_TaskBuffer, &vTX_TaskControlBlock);
-  vTX_TaskHandle = osThreadCreate(osThread(vTX_Task), NULL);
+  /* definition and creation of vTX_SPI1_Task */
+  osThreadStaticDef(vTX_SPI1_Task, vTX_SPI1_TaskFunc, osPriorityAboveNormal, 0, 256, vTX_TaskBuffer, &vTX_TaskControlBlock);
+  vTX_SPI1_TaskHandle = osThreadCreate(osThread(vTX_SPI1_Task), NULL);
 
   /* definition and creation of vPacket_Processing_Task */
   osThreadStaticDef(vPacket_Processing_Task, vPacket_Processing_TaskFunc, osPriorityNormal, 0, 512, vPacket_Processing_TaskBuffer, &vPacket_Processing_TaskControlBlock);
@@ -322,6 +333,10 @@ int main(void)
   /* definition and creation of vHearbeat_Task */
   osThreadStaticDef(vHearbeat_Task, vHeartbeat_TaskFunc, osPriorityLow, 0, 128, vHearbeat_TaskBuffer, &vHearbeat_TaskControlBlock);
   vHearbeat_TaskHandle = osThreadCreate(osThread(vHearbeat_Task), NULL);
+
+  /* definition and creation of vTX_SPI2_Task */
+  osThreadStaticDef(vTX_SPI2_Task, vTX_SPI2_TaskFunc, osPriorityAboveNormal, 0, 256, vTX_SPI2_TaskBuffer, &vTX_SPI2_TaskControlBlock);
+  vTX_SPI2_TaskHandle = osThreadCreate(osThread(vTX_SPI2_Task), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -391,28 +406,28 @@ void SystemClock_Config(void)
   * @param None
   * @retval None
   */
-static void MX_IWDG_Init(void)
-{
-
-  /* USER CODE BEGIN IWDG_Init 0 */
-
-  /* USER CODE END IWDG_Init 0 */
-
-  /* USER CODE BEGIN IWDG_Init 1 */
-
-  /* USER CODE END IWDG_Init 1 */
-  hiwdg.Instance = IWDG;
-  hiwdg.Init.Prescaler = IWDG_PRESCALER_64;
-  hiwdg.Init.Reload = 1874;
-  if (HAL_IWDG_Init(&hiwdg) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN IWDG_Init 2 */
-
-  /* USER CODE END IWDG_Init 2 */
-
-}
+//static void MX_IWDG_Init(void)
+//{
+//
+//  /* USER CODE BEGIN IWDG_Init 0 */
+//
+//  /* USER CODE END IWDG_Init 0 */
+//
+//  /* USER CODE BEGIN IWDG_Init 1 */
+//
+//  /* USER CODE END IWDG_Init 1 */
+////  hiwdg.Instance = IWDG;
+//  hiwdg.Init.Prescaler = IWDG_PRESCALER_64;
+//  hiwdg.Init.Reload = 1874;
+//  if (HAL_IWDG_Init(&hiwdg) != HAL_OK)
+//  {
+//    Error_Handler();
+//  }
+//  /* USER CODE BEGIN IWDG_Init 2 */
+//
+//  /* USER CODE END IWDG_Init 2 */
+//
+//}
 
 /**
   * @brief SPI1 Initialization Function
@@ -437,7 +452,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_64;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -475,7 +490,7 @@ static void MX_SPI2_Init(void)
   hspi2.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi2.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi2.Init.NSS = SPI_NSS_SOFT;
-  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_32;
   hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -620,9 +635,9 @@ void vRX_SPI1_TaskFunc(void const * argument)
   for(;;)
   {
 	  // Report to vHeartbeat_Task
-	  taskENTER_CRITICAL();
-	  task_alive_flags |= TASK_ALIVE_RX1;
-	  taskEXIT_CRITICAL();
+//	  taskENTER_CRITICAL();
+//	  task_alive_flags |= TASK_ALIVE_RX1;
+//	  taskEXIT_CRITICAL();
 
 	  // Wait for interrupt signal from the ENC28J60 1
 	  osSemaphoreWait(xSem_INT_SPI1, 50);
@@ -631,12 +646,31 @@ void vRX_SPI1_TaskFunc(void const * argument)
 	   * Because the ENC28J60 only sends an interrupt even if there are many packets
 	   */
 	  uint8_t rx_count = 0;
-	  while ((ENC28J60_ReadRegGlo(&spi1, EPKTCNT) > 0) && rx_count < 6) {
-		  RX_HandlePacket(&spi1, 1);
-		  rx_count++;
+
+	  while (rx_count < 6) {
+		  if (osMutexWait(dev1_mutex, 50) == osOK) {
+			  if (ENC28J60_ReadReg(&dev1, EPKTCNT) > 0) {
+				  RX_HandlePacket(&dev1, 1);
+				  rx_count++;
+				  osMutexRelease(dev1_mutex);
+			  } else {
+				  osMutexRelease(dev1_mutex);
+				  break;
+			  }
+		  } else {
+			  break;
+		  }
 	  }
-	  ENC28J60_ClearErrors(&spi1);
-    osDelay(1);
+
+	  if (rx_count == 6) {
+	  	  if (osMutexWait(dev1_mutex, 10) == osOK) {
+	  		  if (ENC28J60_ReadReg(&dev1, EPKTCNT) > 0) {
+	  			  osSemaphoreRelease(xSem_INT_SPI1);
+	  		  }
+	  		  osMutexRelease(dev1_mutex);
+	  	  }
+	    }
+	    osDelay(1);
   }
   /* USER CODE END vRX_SPI1_TaskFunc */
 }
@@ -657,60 +691,76 @@ void vRX_SPI2_TaskFunc(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-	  taskENTER_CRITICAL();
-	  task_alive_flags |= TASK_ALIVE_RX2;
-	  taskEXIT_CRITICAL();
+//	  taskENTER_CRITICAL();
+//	  task_alive_flags |= TASK_ALIVE_RX2;
+//	  taskEXIT_CRITICAL();
 
 	  osSemaphoreWait(xSem_INT_SPI2, 50);
 
 	  uint8_t rx_count = 0;
-	  while ((ENC28J60_ReadRegGlo(&spi2, EPKTCNT) > 0) && rx_count < 6) {
-		  RX_HandlePacket(&spi2, 2);
-		  rx_count++;
+	  while (rx_count < 6) {
+		  if (osMutexWait(dev2_mutex, 50) == osOK) {
+			  if (ENC28J60_ReadReg(&dev2, EPKTCNT) > 0) {
+				  RX_HandlePacket(&dev2, 2);
+				  rx_count++;
+				  osMutexRelease(dev2_mutex);
+			  } else {
+				  osMutexRelease(dev2_mutex);
+				  break;
+			  }
+		  } else {
+			  break;
+		  }
 	  }
 
-	  ENC28J60_ClearErrors(&spi2);
-    osDelay(1);
+	  if (rx_count == 6) {
+		  if (osMutexWait(dev2_mutex, 10) == osOK) {
+			  if (ENC28J60_ReadReg(&dev2, EPKTCNT) > 0) {
+				  osSemaphoreRelease(xSem_INT_SPI2);
+			  }
+			  osMutexRelease(dev2_mutex);
+		  }
+	  }
+	  osDelay(1);
   }
   /* USER CODE END vRX_SPI2_TaskFunc */
 }
 
-/* USER CODE BEGIN Header_vTX_TaskFunc */
+/* USER CODE BEGIN Header_vTX_SPI1_TaskFunc */
 /**
-* @brief Function implementing the vTX_Task thread.
+* @brief Function implementing the vTX_SPI1_Task thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_vTX_TaskFunc */
-void vTX_TaskFunc(void const * argument)
+/* USER CODE END Header_vTX_SPI1_TaskFunc */
+void vTX_SPI1_TaskFunc(void const * argument)
 {
-  /* USER CODE BEGIN vTX_TaskFunc */
+  /* USER CODE BEGIN vTX_SPI1_TaskFunc */
 	while (!is_init_done) {
 		osDelay(10);
 	}
+
 	osEvent event;
 	PacketBuffer *packet;
   /* Infinite loop */
   for(;;)
   {
-	  taskENTER_CRITICAL();
-	  task_alive_flags |= TASK_ALIVE_TX;
-	  taskEXIT_CRITICAL();
+//	  taskENTER_CRITICAL();
+//	  task_alive_flags |= TASK_ALIVE_TX1;
+//	  taskEXIT_CRITICAL();
 
-	  event = osMessageGet(xTX_QueueHandle, 50);
+	  event = osMessageGet(xTX_SPI1_QueueHandle, 50);
 	  if (event.status == osEventMessage) {
 		  packet = (PacketBuffer*)event.value.p;
 
-		  if (packet->source_spi == 1) {
-			  ENC28J60_SendPacket(&spi2, packet->data, packet->length);
-		  } else if (packet->source_spi == 2) {
-			  ENC28J60_SendPacket(&spi1, packet->data, packet->length);
+		  if (osMutexWait(dev1_mutex, 50) == osOK) {
+			  ENC28J60_SendPacket(&dev1, packet->data, packet->length);
+			  osMutexRelease(dev1_mutex);
 		  }
-
 		  BufferPool_Release(packet);
 	  }
   }
-  /* USER CODE END vTX_TaskFunc */
+  /* USER CODE END vTX_SPI1_TaskFunc */
 }
 
 /* USER CODE BEGIN Header_vPacket_Processing_TaskFunc */
@@ -728,13 +778,13 @@ void vPacket_Processing_TaskFunc(void const * argument)
 	}
 	osEvent event;
 	PacketBuffer *packet;
-	static AES_ctx ctx;
+//	static AES_ctx ctx;
   /* Infinite loop */
   for(;;)
   {
-	  taskENTER_CRITICAL();
-	  task_alive_flags |= TASK_ALIVE_AES;
-	  taskEXIT_CRITICAL();
+//	  taskENTER_CRITICAL();
+//	  task_alive_flags |= TASK_ALIVE_AES;
+//	  taskEXIT_CRITICAL();
 
 	  event = osMessageGet(xRX_QueueHandle, 50);
 	  if (event.status == osEventMessage) {
@@ -752,10 +802,18 @@ void vPacket_Processing_TaskFunc(void const * argument)
 
 		  // Forward ARP packets
 		  if (ethernet_type == 0x0806) {
-		      if (osMessagePut(xTX_QueueHandle, (uint32_t)packet, 10) != osOK) {
-		          BufferPool_Release(packet);
-		      }
-		      continue;
+			  if (packet->source_spi == 1) {
+				  if (osMessagePut(xTX_SPI2_QueueHandle, (uint32_t)packet, 10) != osOK) {
+					  BufferPool_Release(packet);
+				  }
+			  } else if (packet->source_spi == 2) {
+				  if (osMessagePut(xTX_SPI1_QueueHandle, (uint32_t)packet, 10) != osOK) {
+					  BufferPool_Release(packet);
+				  }
+			  } else {
+				  BufferPool_Release(packet);
+			  }
+			  continue;
 		  } else if (ethernet_type == 0x0800) { // IPv4
 			  uint16_t real_ip_length = (packet->data[16] << 8) | packet->data[17];
 			  if (14 + real_ip_length < packet->length) {
@@ -764,7 +822,15 @@ void vPacket_Processing_TaskFunc(void const * argument)
 
 			  // Accept ICMP packets (ping)
 			  if (ip_protocol == 0x01) {
-				  if (osMessagePut(xTX_QueueHandle, (uint32_t)packet, 10) != osOK) {
+				  if (packet->source_spi == 1) {
+					  if (osMessagePut(xTX_SPI2_QueueHandle, (uint32_t)packet, 10) != osOK) {
+						  BufferPool_Release(packet);
+					  }
+				  } else if (packet->source_spi == 2) {
+					  if (osMessagePut(xTX_SPI1_QueueHandle, (uint32_t)packet, 10) != osOK) {
+						  BufferPool_Release(packet);
+					  }
+				  } else {
 					  BufferPool_Release(packet);
 				  }
 				  continue;
@@ -781,7 +847,7 @@ void vPacket_Processing_TaskFunc(void const * argument)
 		  }
 
 		  // Read IHL (Internet Header Length)
-		  uint8_t ip_header_length = (packet->data[14] & 0x0F) * 4;
+		  uint8_t ip_header_length = (packet->data[14] & 0x0F) << 2;
 		  // Calculate the length of UDP header (Ethernet header (14), IP header, UDP header)
 		  uint16_t udp_payload_offset = 14 + ip_header_length + 8;
 
@@ -816,16 +882,24 @@ void vPacket_Processing_TaskFunc(void const * argument)
 		  }
 
 		  // Step 3: Encrypt payload
-		  uint8_t iv[16] = {0}; // static Initialization Vector
-		  AES_init_ctx_iv(&ctx, found_key, iv);
-
-		  AES_CBC_PKCS7_Encrypt(&ctx, packet, udp_payload_offset);
-
-		  // Step 4: Recalculate checksum and length
-		  Update_Ip_Checksum(packet, ip_header_length);
+//		  uint8_t iv[16] = {0}; // static Initialization Vector
+//		  AES_init_ctx_iv(&ctx, found_key, iv);
+//
+//		  AES_CBC_PKCS7_Encrypt(&ctx, packet, udp_payload_offset);
+//
+//		  // Step 4: Recalculate checksum and length
+//		  Update_Ip_Checksum(packet, ip_header_length);
 
 		  // Step 5: Put into the xTX_Queue
-		  if (osMessagePut(xTX_QueueHandle, (uint32_t)packet, 10) != osOK) {
+		  if (packet->source_spi == 1) {
+			  if (osMessagePut(xTX_SPI2_QueueHandle, (uint32_t)packet, 10) != osOK) {
+				  BufferPool_Release(packet);
+			  }
+		  } else if (packet->source_spi == 2) {
+			  if (osMessagePut(xTX_SPI1_QueueHandle, (uint32_t)packet, 10) != osOK) {
+				  BufferPool_Release(packet);
+			  }
+		  } else {
 			  BufferPool_Release(packet);
 		  }
 	  }
@@ -845,55 +919,99 @@ void vHeartbeat_TaskFunc(void const * argument)
   /* USER CODE BEGIN vHeartbeat_TaskFunc */
 	// HAL_IWDG_Refresh(&hiwdg);
 	User_Init();
-	MX_IWDG_Init();
-	HAL_IWDG_Refresh(&hiwdg);
+//	MX_IWDG_Init();
+//	HAL_IWDG_Refresh(&hiwdg);
 
 	is_init_done = 1;
   /* Infinite loop */
   for(;;)
   {
-	  // Check the status of the Tasks
-	  if ((task_alive_flags & TASK_ALIVE_ALL) == TASK_ALIVE_ALL) {
-		  HAL_IWDG_Refresh(&hiwdg);
-		  taskENTER_CRITICAL();
-		  task_alive_flags = 0;
-		  taskEXIT_CRITICAL();
-	  }
+//	  // Check the status of the Tasks
+//	  if ((task_alive_flags & TASK_ALIVE_ALL) == TASK_ALIVE_ALL) {
+//		  HAL_IWDG_Refresh(&hiwdg);
+//		  taskENTER_CRITICAL();
+//		  task_alive_flags = 0;
+//		  taskEXIT_CRITICAL();
+//	  }
 
 	  // Blink heart led (PC13)
-	  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
-	  HAL_IWDG_Refresh(&hiwdg);
+	  HAL_GPIO_TogglePin(HEART_BEAT_GPIO_Port, HEART_BEAT_Pin);
 
 	  // Monitor the Link status of Module 1 (SPI1)
-	  uint16_t phstat1_1 = ENC28J60_ReadPhy(&spi1, PHSTAT1);
-	  if (!(phstat1_1 & PHSTAT1_LLSTAT)) { // Link down
-		  link_down_count_spi1++;
-		  if (link_down_count_spi1 >= 8) { // Link down 4s
-			  ENC28J60_Init(&spi1, mac1_addr);
-			  HAL_IWDG_Refresh(&hiwdg);
-			  link_down_count_spi1 = 0;
+	  if (osMutexWait(dev1_mutex, 50) == osOK) {
+		  uint16_t phstat1_1 = ENC28J60_ReadPhy(&dev1, PHSTAT1);
+		  if (!(phstat1_1 & PHSTAT1_LLSTAT)) { // Link down
+			  link_down_count_dev1++;
+			  if (link_down_count_dev1 >= 8) { // Link down 4s
+				  if (ENC28J60_Init(&dev1, mac1_addr) == 1) {
+//	      	     	  HAL_IWDG_Refresh(&hiwdg);
+			          link_down_count_dev1 = 0;
+				  }
+			  }
+		  } else {
+			  link_down_count_dev1 = 0; // Link up
 		  }
-	  } else {
-		  link_down_count_spi1 = 0; // Link up
+		  osMutexRelease(dev1_mutex);
 	  }
 
 
 	  // Monitor the Link status of Module 2 (SPI2)
-	  uint16_t phstat1_2 = ENC28J60_ReadPhy(&spi2, PHSTAT1);
-	  if (!(phstat1_2 & PHSTAT1_LLSTAT)) { // Link down
-		  link_down_count_spi2++;
-		  if (link_down_count_spi2 >= 8) {
-			  ENC28J60_Init(&spi2, mac2_addr);
-			  HAL_IWDG_Refresh(&hiwdg);
-			  link_down_count_spi2 = 0;
+	  if (osMutexWait(dev2_mutex, 50) == osOK) {
+		  uint16_t phstat1_2 = ENC28J60_ReadPhy(&dev2, PHSTAT1);
+		  if (!(phstat1_2 & PHSTAT1_LLSTAT)) { // Link down
+			  link_down_count_dev2++;
+			  if (link_down_count_dev2 >= 8) {
+				  if (ENC28J60_Init(&dev2, mac2_addr) == 1) {
+//	   		         HAL_IWDG_Refresh(&hiwdg);
+			         link_down_count_dev2 = 0;
+				  }
+			  }
+		  } else {
+			  link_down_count_dev2 = 0;
 		  }
-	  } else {
-		  link_down_count_spi2 = 0;
+		  osMutexRelease(dev2_mutex);
 	  }
 
     osDelay(500);
   }
   /* USER CODE END vHeartbeat_TaskFunc */
+}
+
+/* USER CODE BEGIN Header_vTX_SPI2_TaskFunc */
+/**
+* @brief Function implementing the vTX_SPI2_Task thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_vTX_SPI2_TaskFunc */
+void vTX_SPI2_TaskFunc(void const * argument)
+{
+  /* USER CODE BEGIN vTX_SPI2_TaskFunc */
+	while (!is_init_done) {
+		osDelay(10);
+	}
+	osEvent event;
+	PacketBuffer *packet;
+  /* Infinite loop */
+  for(;;)
+  {
+//	  taskENTER_CRITICAL();
+//	  task_alive_flags |= TASK_ALIVE_TX1;
+//	  taskEXIT_CRITICAL();
+
+	  event = osMessageGet(xTX_SPI2_QueueHandle, 50);
+	  if (event.status == osEventMessage) {
+		  packet = (PacketBuffer*)event.value.p;
+
+		  if (osMutexWait(dev2_mutex, 50) == osOK) {
+			  ENC28J60_SendPacket(&dev2, packet->data, packet->length);
+			  osMutexRelease(dev2_mutex);
+		  }
+		  BufferPool_Release(packet);
+	  }
+
+  }
+  /* USER CODE END vTX_SPI2_TaskFunc */
 }
 
 /**

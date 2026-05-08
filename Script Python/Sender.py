@@ -1,13 +1,13 @@
 import socket
 import time
 
-TARGET_IP_RASP = "10.0.0.20"
-TARGET_IP_LAPTOP = "10.0.0.10"
+TARGET_IP_RASP = "192.168.5.10"
+TARGET_IP_LAPTOP = "192.168.5.2"
 
-SOURCE_IP_RASP = "10.0.0.20"
-SOURCE_IP_LAPTOP = "10.0.0.10"
+SOURCE_IP_RASP = "192.168.5.10"
+SOURCE_IP_LAPTOP = "192.168.5.2"
 
-PACKET_COUNT = 100
+PACKET_COUNT = 1000
 
 TARGET_PORT = 8080
 
@@ -16,10 +16,9 @@ sock.bind((SOURCE_IP_LAPTOP, 0))
 
 print(f"Preparing to send data to {TARGET_IP_RASP}:{TARGET_PORT}")
 
-payload = b"".join(f"Block_{i:02d}_Data___".encode('ascii') for i in range(32))
-assert len(payload) == 512, "Payload is not 512 bytes"
+base_payload = b"".join(f"Block_{i:02d}_Data___".encode('ascii') for i in range(20))
 
-print(f"Sending: '{payload}' (Length: {len(payload)} bytes)")
+print(f"Base Payload length: {len(base_payload)} bytes")
 
 # Send
 start_time = time.time()
@@ -27,8 +26,11 @@ sent_count = 0
 
 try:
     for i in range(PACKET_COUNT):
-        sock.sendto(payload, (TARGET_IP_RASP, TARGET_PORT))
+        seq_header = f"SEQ:{i:04d}|".encode('ascii')
+        packet_data = seq_header + base_payload
+        sock.sendto(packet_data, (TARGET_IP_RASP, TARGET_PORT))
         sent_count += 1
+        print(f"\rSent: {seq_header.decode('ascii')} (Total: {len(packet_data)} bytes)", end="")
         time.sleep(0.02)
 
 except KeyboardInterrupt:
