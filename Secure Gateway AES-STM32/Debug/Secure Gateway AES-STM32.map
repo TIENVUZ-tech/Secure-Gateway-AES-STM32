@@ -2506,7 +2506,7 @@ Discarded input sections
                 0x00000000      0x1cc ./Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_spi.o
  .text.HAL_SPI_TxCpltCallback
                 0x00000000       0x12 ./Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_spi.o
- .text.HAL_SPI_RxCpltCallback
+ .text.HAL_SPI_TxRxCpltCallback
                 0x00000000       0x12 ./Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_spi.o
  .text.HAL_SPI_ErrorCallback
                 0x00000000       0x12 ./Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_spi.o
@@ -4392,9 +4392,9 @@ LOAD C:/ST/STM32CubeIDE_1.19.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.ext
  .text.HAL_GPIO_EXTI_Callback
                 0x08000e68       0x7c ./Core/Src/freertos.o
                 0x08000e68                HAL_GPIO_EXTI_Callback
- .text.HAL_SPI_RxCpltCallback
+ .text.HAL_SPI_TxRxCpltCallback
                 0x08000ee4       0x8c ./Core/Src/freertos.o
-                0x08000ee4                HAL_SPI_RxCpltCallback
+                0x08000ee4                HAL_SPI_TxRxCpltCallback
  .text.HAL_SPI_TxCpltCallback
                 0x08000f70       0x8c ./Core/Src/freertos.o
                 0x08000f70                HAL_SPI_TxCpltCallback
@@ -4641,9 +4641,9 @@ LOAD C:/ST/STM32CubeIDE_1.19.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.ext
  .text.HAL_SPI_DMAStop
                 0x080041f0       0x7e ./Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_spi.o
                 0x080041f0                HAL_SPI_DMAStop
- .text.HAL_SPI_TxRxCpltCallback
+ .text.HAL_SPI_RxCpltCallback
                 0x0800426e       0x12 ./Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_spi.o
-                0x0800426e                HAL_SPI_TxRxCpltCallback
+                0x0800426e                HAL_SPI_RxCpltCallback
  .text.HAL_SPI_TxHalfCpltCallback
                 0x08004280       0x12 ./Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_spi.o
                 0x08004280                HAL_SPI_TxHalfCpltCallback
@@ -5653,7 +5653,7 @@ LOAD C:/ST/STM32CubeIDE_1.19.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.ext
  .debug_str     0x00000000    0x93e1c ./Core/Src/buffer_pool.o
                                0xd42f (size before relaxing)
  .debug_str     0x00093e1c    0x8d41b ./Core/Src/enc28j60_driver.o
- .debug_str     0x00093e1c    0x8d738 ./Core/Src/freertos.o
+ .debug_str     0x00093e1c    0x8d73a ./Core/Src/freertos.o
  .debug_str     0x00093e1c    0x8ed88 ./Core/Src/main.o
  .debug_str     0x00093e1c    0x83db3 ./Core/Src/stm32f1xx_hal_msp.o
  .debug_str     0x00093e1c    0x83d28 ./Core/Src/stm32f1xx_hal_timebase_tim.o

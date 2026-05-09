@@ -153,7 +153,8 @@ uint8_t ENC28J60_Init(ENC28J60_Config *dev, uint8_t *mac_address) {
     ENC28J60_WritePhy(dev, PHLCON, 0x347A);
 
     // Receive filter: Unicast + Broadcast + CRC valid
-    ENC28J60_WriteReg(dev, ERXFCON, ERXFCON_UCEN | ERXFCON_CRCEN | ERXFCON_BCEN);
+//    ENC28J60_WriteReg(dev, ERXFCON, ERXFCON_UCEN | ERXFCON_CRCEN | ERXFCON_BCEN);
+    ENC28J60_WriteReg(dev, ERXFCON, ERXFCON_CRCEN);
 
     // Enable receive
     ENC28J60_WriteOp(dev, ENC28J60_BIT_FIELD_SET, ECON1, ECON1_RXEN);

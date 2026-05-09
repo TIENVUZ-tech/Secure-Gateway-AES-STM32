@@ -90,7 +90,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	if (xHigherPriorityTaskWoken == pdTRUE) portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 // The automatic callback is invoked when the DMA is complete
-void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi) {
+void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) {
 	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
 	if (hspi->Instance == SPI1) {

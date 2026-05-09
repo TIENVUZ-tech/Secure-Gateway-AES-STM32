@@ -965,8 +965,9 @@ uint8_t ENC28J60_Init(ENC28J60_Config *dev, uint8_t *mac_address) {
  800075e:	f7ff fea1 	bl	80004a4 <ENC28J60_WritePhy>
 
     // Receive filter: Unicast + Broadcast + CRC valid
-    ENC28J60_WriteReg(dev, ERXFCON, ERXFCON_UCEN | ERXFCON_CRCEN | ERXFCON_BCEN);
- 8000762:	22a1      	movs	r2, #161	@ 0xa1
+//    ENC28J60_WriteReg(dev, ERXFCON, ERXFCON_UCEN | ERXFCON_CRCEN | ERXFCON_BCEN);
+    ENC28J60_WriteReg(dev, ERXFCON, ERXFCON_CRCEN);
+ 8000762:	2220      	movs	r2, #32
  8000764:	2138      	movs	r1, #56	@ 0x38
  8000766:	6878      	ldr	r0, [r7, #4]
  8000768:	f7ff fe85 	bl	8000476 <ENC28J60_WriteReg>
@@ -2080,9 +2081,9 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
  8000edc:	20003f00 	.word	0x20003f00
  8000ee0:	e000ed04 	.word	0xe000ed04
 
-08000ee4 <HAL_SPI_RxCpltCallback>:
+08000ee4 <HAL_SPI_TxRxCpltCallback>:
 // The automatic callback is invoked when the DMA is complete
-void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi) {
+void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) {
  8000ee4:	b580      	push	{r7, lr}
  8000ee6:	b084      	sub	sp, #16
  8000ee8:	af00      	add	r7, sp, #0
@@ -2094,33 +2095,33 @@ void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi) {
 	if (hspi->Instance == SPI1) {
  8000ef0:	687b      	ldr	r3, [r7, #4]
  8000ef2:	681b      	ldr	r3, [r3, #0]
- 8000ef4:	4a19      	ldr	r2, [pc, #100]	@ (8000f5c <HAL_SPI_RxCpltCallback+0x78>)
+ 8000ef4:	4a19      	ldr	r2, [pc, #100]	@ (8000f5c <HAL_SPI_TxRxCpltCallback+0x78>)
  8000ef6:	4293      	cmp	r3, r2
- 8000ef8:	d10c      	bne.n	8000f14 <HAL_SPI_RxCpltCallback+0x30>
+ 8000ef8:	d10c      	bne.n	8000f14 <HAL_SPI_TxRxCpltCallback+0x30>
 		if (xSem_DMA_SPI1_Done != NULL) xSemaphoreGiveFromISR(xSem_DMA_SPI1_Done, &xHigherPriorityTaskWoken);
- 8000efa:	4b19      	ldr	r3, [pc, #100]	@ (8000f60 <HAL_SPI_RxCpltCallback+0x7c>)
+ 8000efa:	4b19      	ldr	r3, [pc, #100]	@ (8000f60 <HAL_SPI_TxRxCpltCallback+0x7c>)
  8000efc:	681b      	ldr	r3, [r3, #0]
  8000efe:	2b00      	cmp	r3, #0
- 8000f00:	d019      	beq.n	8000f36 <HAL_SPI_RxCpltCallback+0x52>
- 8000f02:	4b17      	ldr	r3, [pc, #92]	@ (8000f60 <HAL_SPI_RxCpltCallback+0x7c>)
+ 8000f00:	d019      	beq.n	8000f36 <HAL_SPI_TxRxCpltCallback+0x52>
+ 8000f02:	4b17      	ldr	r3, [pc, #92]	@ (8000f60 <HAL_SPI_TxRxCpltCallback+0x7c>)
  8000f04:	681b      	ldr	r3, [r3, #0]
  8000f06:	f107 020c 	add.w	r2, r7, #12
  8000f0a:	4611      	mov	r1, r2
  8000f0c:	4618      	mov	r0, r3
  8000f0e:	f004 fcef 	bl	80058f0 <xQueueGiveFromISR>
- 8000f12:	e010      	b.n	8000f36 <HAL_SPI_RxCpltCallback+0x52>
+ 8000f12:	e010      	b.n	8000f36 <HAL_SPI_TxRxCpltCallback+0x52>
 	} else if (hspi->Instance == SPI2) {
  8000f14:	687b      	ldr	r3, [r7, #4]
  8000f16:	681b      	ldr	r3, [r3, #0]
- 8000f18:	4a12      	ldr	r2, [pc, #72]	@ (8000f64 <HAL_SPI_RxCpltCallback+0x80>)
+ 8000f18:	4a12      	ldr	r2, [pc, #72]	@ (8000f64 <HAL_SPI_TxRxCpltCallback+0x80>)
  8000f1a:	4293      	cmp	r3, r2
- 8000f1c:	d10b      	bne.n	8000f36 <HAL_SPI_RxCpltCallback+0x52>
+ 8000f1c:	d10b      	bne.n	8000f36 <HAL_SPI_TxRxCpltCallback+0x52>
 		if (xSem_DMA_SPI2_Done != NULL) xSemaphoreGiveFromISR(xSem_DMA_SPI2_Done, &xHigherPriorityTaskWoken);
- 8000f1e:	4b12      	ldr	r3, [pc, #72]	@ (8000f68 <HAL_SPI_RxCpltCallback+0x84>)
+ 8000f1e:	4b12      	ldr	r3, [pc, #72]	@ (8000f68 <HAL_SPI_TxRxCpltCallback+0x84>)
  8000f20:	681b      	ldr	r3, [r3, #0]
  8000f22:	2b00      	cmp	r3, #0
- 8000f24:	d007      	beq.n	8000f36 <HAL_SPI_RxCpltCallback+0x52>
- 8000f26:	4b10      	ldr	r3, [pc, #64]	@ (8000f68 <HAL_SPI_RxCpltCallback+0x84>)
+ 8000f24:	d007      	beq.n	8000f36 <HAL_SPI_TxRxCpltCallback+0x52>
+ 8000f26:	4b10      	ldr	r3, [pc, #64]	@ (8000f68 <HAL_SPI_TxRxCpltCallback+0x84>)
  8000f28:	681b      	ldr	r3, [r3, #0]
  8000f2a:	f107 020c 	add.w	r2, r7, #12
  8000f2e:	4611      	mov	r1, r2
@@ -2131,11 +2132,11 @@ void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi) {
 	if (xHigherPriorityTaskWoken == pdTRUE) portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
  8000f36:	68fb      	ldr	r3, [r7, #12]
  8000f38:	2b01      	cmp	r3, #1
- 8000f3a:	d10a      	bne.n	8000f52 <HAL_SPI_RxCpltCallback+0x6e>
+ 8000f3a:	d10a      	bne.n	8000f52 <HAL_SPI_TxRxCpltCallback+0x6e>
  8000f3c:	68fb      	ldr	r3, [r7, #12]
  8000f3e:	2b00      	cmp	r3, #0
- 8000f40:	d007      	beq.n	8000f52 <HAL_SPI_RxCpltCallback+0x6e>
- 8000f42:	4b0a      	ldr	r3, [pc, #40]	@ (8000f6c <HAL_SPI_RxCpltCallback+0x88>)
+ 8000f40:	d007      	beq.n	8000f52 <HAL_SPI_TxRxCpltCallback+0x6e>
+ 8000f42:	4b0a      	ldr	r3, [pc, #40]	@ (8000f6c <HAL_SPI_TxRxCpltCallback+0x88>)
  8000f44:	f04f 5280 	mov.w	r2, #268435456	@ 0x10000000
  8000f48:	601a      	str	r2, [r3, #0]
  8000f4a:	f3bf 8f4f 	dsb	sy
@@ -3355,8 +3356,8 @@ void StartDefaultTask(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-    osDelay(1);
- 8001760:	2001      	movs	r0, #1
+    osDelay(10);
+ 8001760:	200a      	movs	r0, #10
  8001762:	f003 faa4 	bl	8004cae <osDelay>
  8001766:	e7fb      	b.n	8001760 <StartDefaultTask+0x8>
 
@@ -11088,12 +11089,12 @@ HAL_StatusTypeDef HAL_SPI_DMAStop(SPI_HandleTypeDef *hspi)
  800426a:	46bd      	mov	sp, r7
  800426c:	bd80      	pop	{r7, pc}
 
-0800426e <HAL_SPI_TxRxCpltCallback>:
+0800426e <HAL_SPI_RxCpltCallback>:
   * @param  hspi pointer to a SPI_HandleTypeDef structure that contains
   *               the configuration information for SPI module.
   * @retval None
   */
-__weak void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
+__weak void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi)
 {
  800426e:	b480      	push	{r7}
  8004270:	b083      	sub	sp, #12
@@ -11102,7 +11103,7 @@ __weak void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
   UNUSED(hspi);
 
   /* NOTE : This function should not be modified, when the callback is needed,
-            the HAL_SPI_TxRxCpltCallback should be implemented in the user file
+            the HAL_SPI_RxCpltCallback should be implemented in the user file
    */
 }
  8004276:	bf00      	nop
@@ -11442,7 +11443,7 @@ static void SPI_DMAReceiveCplt(DMA_HandleTypeDef *hdma)
 #else
   HAL_SPI_RxCpltCallback(hspi);
  80043f6:	68f8      	ldr	r0, [r7, #12]
- 80043f8:	f7fc fd74 	bl	8000ee4 <HAL_SPI_RxCpltCallback>
+ 80043f8:	f7ff ff39 	bl	800426e <HAL_SPI_RxCpltCallback>
 #endif /* USE_HAL_SPI_REGISTER_CALLBACKS */
 }
  80043fc:	3710      	adds	r7, #16
@@ -11563,7 +11564,7 @@ static void SPI_DMATransmitReceiveCplt(DMA_HandleTypeDef *hdma)
 #else
   HAL_SPI_TxRxCpltCallback(hspi);
  8004484:	68f8      	ldr	r0, [r7, #12]
- 8004486:	f7ff fef2 	bl	800426e <HAL_SPI_TxRxCpltCallback>
+ 8004486:	f7fc fd2d 	bl	8000ee4 <HAL_SPI_TxRxCpltCallback>
 #endif /* USE_HAL_SPI_REGISTER_CALLBACKS */
 }
  800448a:	3710      	adds	r7, #16
