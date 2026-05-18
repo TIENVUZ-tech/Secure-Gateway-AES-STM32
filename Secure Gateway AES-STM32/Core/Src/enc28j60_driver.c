@@ -1,9 +1,31 @@
 #include "enc28j60_driver.h"
 
+#define ENC28J60_DMA_DUMMY_LEN 614U
+#define ENC28J60_TX_MAX_LEN 614U
+#define ENC28J60_TX_TIMEOUT_MS 50U
+#define ENC28J60_TX_RETRIES 5U
+
 //  next_packet_ptr=0,  current_bank=0xFF (Start ENC28J60_SetBank for the first time)
 ENC28J60_Config dev1 = {&hspi1, GPIOA, GPIO_PIN_4, 0, GPIOA, GPIO_PIN_2, 0xFF};
 ENC28J60_Config dev2 = {&hspi2, GPIOB, GPIO_PIN_12, 0, GPIOA, GPIO_PIN_3, 0xFF};
-static uint8_t dummy_tx[MAX_FRAME_LEN] = {0};
+static uint8_t dummy_tx[ENC28J60_DMA_DUMMY_LEN] = {0};
+
+volatile uint32_t diag_enc_next_ptr = 0;
+volatile uint32_t diag_enc_rx_len = 0;
+volatile uint32_t diag_enc_rxstat = 0;
+volatile uint32_t diag_enc_fail_reason = 0;
+volatile uint32_t diag_enc_tx_abort = 0;
+volatile uint32_t diag_enc_tx_timeout = 0;
+volatile uint32_t diag_enc_tx_fail_reason = 0;
+
+static void ENC28J60_ResetTxLogic(ENC28J60_Config *dev) {
+    ENC28J60_WriteOp(dev, ENC28J60_BIT_FIELD_SET, ECON1, ECON1_TXRST);
+    ENC28J60_WriteOp(dev, ENC28J60_BIT_FIELD_CLR, ECON1, ECON1_TXRST);
+    ENC28J60_WriteOp(dev, ENC28J60_BIT_FIELD_CLR, EIR, EIR_TXERIF | EIR_TXIF);
+
+    // Fix errata B1
+    ENC28J60_WriteOp(dev, ENC28J60_BIT_FIELD_SET, ECON1, ECON1_RXEN);
+}
 
 uint8_t ENC28J60_ReadOp(ENC28J60_Config *dev, uint8_t opcode, uint8_t address) {
     uint8_t result = 0;
@@ -102,6 +124,7 @@ uint8_t ENC28J60_Init(ENC28J60_Config *dev, uint8_t *mac_address) {
     uint8_t reset = ENC28J60_SYS_RST_CMD;
     HAL_SPI_Transmit(dev->hspi, &reset, 1, 100);
     HAL_GPIO_WritePin(dev->NSS_Port, dev->NSS_Pin, GPIO_PIN_SET);
+    HAL_Delay(1);
 
     // Wait for oscillator
     uint32_t t0 = HAL_GetTick();
@@ -123,20 +146,21 @@ uint8_t ENC28J60_Init(ENC28J60_Config *dev, uint8_t *mac_address) {
     ENC28J60_WriteReg(dev, ERXRDPTL, RX_END & 0xFF);
     ENC28J60_WriteReg(dev, ERXRDPTH, RX_END >> 8);
 
-    // Configure MAC
-    // MARXEN = receive frame, TXPAUS+RXPAUS = flow control
+    // Configure MAC (MARXEN = receive frame, TXPAUS+RXPAUS = flow control)
     ENC28J60_WriteReg(dev, MACON1, MACON1_MARXEN | MACON1_TXPAUS | MACON1_RXPAUS);
-    // Auto-padding 60B + CRC + frame length check
-    ENC28J60_WriteReg(dev, MACON3, MACON3_PADCFG0 | MACON3_TXCRCEN | MACON3_FRMLNEN |MACON3_FULDPX);
 
-    // Max frame = 598 bytes
+    // Auto-padding 60B + CRC + frame length check.
+    ENC28J60_WriteReg(dev, MACON3, MACON3_PADCFG0 | MACON3_TXCRCEN | MACON3_FRMLNEN);
+
     ENC28J60_WriteReg(dev, MAMXFLL, MAX_FRAME_LEN & 0xFF);
     ENC28J60_WriteReg(dev, MAMXFLH, MAX_FRAME_LEN >> 8);
 
     // Inter-packet gap
-    ENC28J60_WriteReg(dev, MABBIPG, 0x15);
-    ENC28J60_WriteReg(dev, MAIPGL,  0x12);
-    ENC28J60_WriteReg(dev, MAIPGH,  0x0C);
+    ENC28J60_WriteReg(dev, MABBIPG, 0x12);
+	ENC28J60_WriteReg(dev, MAIPGL,  0x12);
+	ENC28J60_WriteReg(dev, MAIPGH,  0x0C);
+	ENC28J60_WriteReg(dev, MACLCON1, 0x0F);
+	ENC28J60_WriteReg(dev, MACLCON2, 0x37);
 
     // MAC address
     ENC28J60_WriteReg(dev, MAADR1, mac_address[0]);
@@ -146,13 +170,15 @@ uint8_t ENC28J60_Init(ENC28J60_Config *dev, uint8_t *mac_address) {
     ENC28J60_WriteReg(dev, MAADR5, mac_address[4]);
     ENC28J60_WriteReg(dev, MAADR6, mac_address[5]);
 
-    // PHY: full duplex and disable loopback
-    ENC28J60_WritePhy(dev, PHCON1, PHCON1_PDPXMD);
+    ENC28J60_WritePhy(dev, PHCON1, 0x0000);
+
+    // Disable internal TX loopback so the bridge does not receive its own frames.
+    ENC28J60_WritePhy(dev, PHCON2, PHCON2_HDLDIS);
 
     // LED A = Link status, LED B = TX/RX activity, stretch 140ms
     ENC28J60_WritePhy(dev, PHLCON, 0x347A);
 
-    // Receive filter: Unicast + Broadcast + CRC valid
+    // Accept every frame with a valid CRC.
 //    ENC28J60_WriteReg(dev, ERXFCON, ERXFCON_UCEN | ERXFCON_CRCEN | ERXFCON_BCEN);
     ENC28J60_WriteReg(dev, ERXFCON, ERXFCON_CRCEN);
 
@@ -169,18 +195,22 @@ uint8_t ENC28J60_Init(ENC28J60_Config *dev, uint8_t *mac_address) {
 }
 
 uint8_t ENC28J60_SendPacket(ENC28J60_Config *dev, uint8_t *packet_data, uint16_t length) {
+    if (length == 0 || length > ENC28J60_TX_MAX_LEN) {
+        diag_enc_tx_fail_reason = 8;
+        return 0;
+    }
+
     // Wait for the previous transmission to complete
     uint32_t t0 = HAL_GetTick();
     while (ENC28J60_ReadOp(dev, ENC28J60_READ_CTRL_REG, ECON1) & ECON1_TXRTS) {
-        if (ENC28J60_ReadReg(dev, EIR) & EIR_TXERIF || (HAL_GetTick() - t0 > 10)) { // Transmit error interrupt flag bit
-            ENC28J60_WriteOp(dev, ENC28J60_BIT_FIELD_SET, ECON1, ECON1_TXRST);
-            ENC28J60_WriteOp(dev, ENC28J60_BIT_FIELD_CLR, ECON1, ECON1_TXRST);
+        if (ENC28J60_ReadReg(dev, EIR) & EIR_TXERIF || (HAL_GetTick() - t0 > ENC28J60_TX_TIMEOUT_MS)) { // Transmit error interrupt flag bit
+            diag_enc_tx_fail_reason = 1;
             break;
         }
     }
 
-    // Clear TX error from last time
-    ENC28J60_WriteOp(dev, ENC28J60_BIT_FIELD_CLR, EIR, EIR_TXERIF | EIR_TXIF);
+    // Start each frame from a clean TX state. This also clears stale TXABRT/TXERIF.
+    ENC28J60_ResetTxLogic(dev);
 
     // Point EWRPT to the TX buffer
     ENC28J60_WriteReg(dev, EWRPTL, TX_START & 0xFF);
@@ -196,6 +226,7 @@ uint8_t ENC28J60_SendPacket(ENC28J60_Config *dev, uint8_t *packet_data, uint16_t
     	while (osSemaphoreWait(xSem_DMA_SPI1_Done, 0) == osOK); // Clear old semaphore
     	if (HAL_SPI_Transmit_DMA(dev->hspi, packet_data, length) != HAL_OK) {
     		HAL_GPIO_WritePin(dev->NSS_Port, dev->NSS_Pin, GPIO_PIN_SET);
+    		diag_enc_tx_fail_reason = 2;
     		return 0;
     	}
 
@@ -206,12 +237,14 @@ uint8_t ENC28J60_SendPacket(ENC28J60_Config *dev, uint8_t *packet_data, uint16_t
     	    __HAL_SPI_ENABLE(dev->hspi);
 
     		HAL_GPIO_WritePin(dev->NSS_Port, dev->NSS_Pin, GPIO_PIN_SET);
+    		diag_enc_tx_fail_reason = 3;
     		return 0;
     	}
     } else {
     	while (osSemaphoreWait(xSem_DMA_SPI2_Done, 0) == osOK);
     	if (HAL_SPI_Transmit_DMA(dev->hspi, packet_data, length) != HAL_OK) {
     		HAL_GPIO_WritePin(dev->NSS_Port, dev->NSS_Pin, GPIO_PIN_SET);
+    		diag_enc_tx_fail_reason = 2;
     		return 0;
     	}
 
@@ -222,13 +255,18 @@ uint8_t ENC28J60_SendPacket(ENC28J60_Config *dev, uint8_t *packet_data, uint16_t
     		__HAL_SPI_ENABLE(dev->hspi);
 
     		HAL_GPIO_WritePin(dev->NSS_Port, dev->NSS_Pin, GPIO_PIN_SET);
+    		diag_enc_tx_fail_reason = 3;
     		return 0;
     	}
     }
 
     t0 = HAL_GetTick();
     while (__HAL_SPI_GET_FLAG(dev->hspi, SPI_FLAG_BSY)) {
-    	if (HAL_GetTick() - t0 > 10)  break;
+    	if (HAL_GetTick() - t0 > 10) {
+    		HAL_GPIO_WritePin(dev->NSS_Port, dev->NSS_Pin, GPIO_PIN_SET);
+    		diag_enc_tx_fail_reason = 4;
+    		return 0;
+    	}
     }
 
     HAL_GPIO_WritePin(dev->NSS_Port, dev->NSS_Pin, GPIO_PIN_SET);
@@ -244,15 +282,58 @@ uint8_t ENC28J60_SendPacket(ENC28J60_Config *dev, uint8_t *packet_data, uint16_t
     // Enable transmit
     ENC28J60_WriteOp(dev, ENC28J60_BIT_FIELD_SET, ECON1, ECON1_TXRTS);
 
-    return 1;
+    // Silicon Errata #12
+    uint8_t tx_ok = 0;
+    for (uint8_t retry = 0; retry < ENC28J60_TX_RETRIES; retry++) {
+		// Wait for TXRTS to clear (TX done or aborted), max 10ms (Ethernet frame <= 1.2ms @ 10Mbps)
+		t0 = HAL_GetTick();
+		while (ENC28J60_ReadOp(dev, ENC28J60_READ_CTRL_REG, ECON1) & ECON1_TXRTS) {
+			if (HAL_GetTick() - t0 > ENC28J60_TX_TIMEOUT_MS) break;
+		}
+
+		uint8_t tx_still_busy = ENC28J60_ReadOp(dev, ENC28J60_READ_CTRL_REG, ECON1) & ECON1_TXRTS;
+		uint8_t tx_aborted = ENC28J60_ReadOp(dev, ENC28J60_READ_CTRL_REG, ESTAT) & ESTAT_TXABRT;
+		uint8_t tx_error = ENC28J60_ReadReg(dev, EIR) & EIR_TXERIF;
+		if (!tx_still_busy && !tx_aborted && !tx_error) {
+			tx_ok = 1;
+			break;
+		}
+
+		if (tx_aborted || tx_error) {
+			diag_enc_tx_abort++;
+			diag_enc_tx_fail_reason = 5;
+		} else {
+			diag_enc_tx_timeout++;
+			diag_enc_tx_fail_reason = 6;
+		}
+
+		if (retry + 1U < ENC28J60_TX_RETRIES) {
+			// Reset TX logic (clears TXABRT)
+			ENC28J60_ResetTxLogic(dev);
+			// Reload TX pointers (may be corrupted after abort)
+			ENC28J60_WriteReg(dev, ETXSTL, TX_START & 0xFF);
+			ENC28J60_WriteReg(dev, ETXSTH, TX_START >> 8);
+			ENC28J60_WriteReg(dev, ETXNDL, end_addr & 0xFF);
+			ENC28J60_WriteReg(dev, ETXNDH, end_addr >> 8);
+			// Retry TX — data still intact in ENC28J60 TX SRAM
+			ENC28J60_WriteOp(dev, ENC28J60_BIT_FIELD_SET, ECON1, ECON1_TXRTS);
+		}
+	}
+
+    if (!tx_ok) {
+        ENC28J60_ResetTxLogic(dev);
+    }
+
+    return tx_ok;
 }
 
 uint16_t ENC28J60_ReceivePacket(ENC28J60_Config *dev, uint8_t *pBuffer, uint16_t max_length) {
 	// Clear receive error (EIR_RXERIF bit)
 	ENC28J60_ClearErrors(dev);
 
-	// Don't have any packet
+    // Don't have any packet
     if (ENC28J60_ReadReg(dev, EPKTCNT) == 0) {
+    	diag_enc_fail_reason = 7;
     	return 0;
     }
 
@@ -271,21 +352,43 @@ uint16_t ENC28J60_ReceivePacket(ENC28J60_Config *dev, uint8_t *pBuffer, uint16_t
     uint16_t next_ptr = (uint16_t)header[0] | ((uint16_t)header[1] << 8);
     uint16_t len = ((uint16_t)header[2] | ((uint16_t)header[3] << 8)) - 4; // Remove 4 bytes CRC
     uint16_t rxstat = (uint16_t)header[4] | ((uint16_t)header[5] << 8);
+    diag_enc_next_ptr = next_ptr;
+    diag_enc_rx_len = len;
+    diag_enc_rxstat = rxstat;
+    diag_enc_fail_reason = 0;
 
     // Verify next_ptr
     if (next_ptr < RX_START || next_ptr > RX_END) {
     	HAL_GPIO_WritePin(dev->NSS_Port, dev->NSS_Pin, GPIO_PIN_SET);
     	dev->next_packet_ptr = RX_START;
     	ENC28J60_WriteOp(dev, ENC28J60_BIT_FIELD_SET, ECON2, ECON2_PKTDEC);
+    	diag_enc_fail_reason = 1;
     	return 0;
     }
 
     // Check length and Receive Status Vector bit 7
-    if (!(rxstat & 0x0080) || len > max_length) {
+    if (!(rxstat & 0x0080)) {
         HAL_GPIO_WritePin(dev->NSS_Port, dev->NSS_Pin, GPIO_PIN_SET);
 
 		len = 0;
+		diag_enc_fail_reason = 2;
 		goto release;
+    }
+
+    if (len > max_length) {
+        HAL_GPIO_WritePin(dev->NSS_Port, dev->NSS_Pin, GPIO_PIN_SET);
+
+		len = 0;
+		diag_enc_fail_reason = 3;
+		goto release;
+    }
+
+    if (len > sizeof(dummy_tx)) {
+           HAL_GPIO_WritePin(dev->NSS_Port, dev->NSS_Pin, GPIO_PIN_SET);
+
+   		len = 0;
+   		diag_enc_fail_reason = 4;
+   		goto release;
     }
 
     // Receive payload
@@ -294,6 +397,7 @@ uint16_t ENC28J60_ReceivePacket(ENC28J60_Config *dev, uint8_t *pBuffer, uint16_t
     	if (HAL_SPI_TransmitReceive_DMA(dev->hspi, dummy_tx, pBuffer, len) != HAL_OK) {
     		HAL_GPIO_WritePin(dev->NSS_Port, dev->NSS_Pin, GPIO_PIN_SET);
     		len = 0;
+    		diag_enc_fail_reason = 5;
     		goto release;
     	}
     	if (osSemaphoreWait(xSem_DMA_SPI1_Done, 50) != osOK) {
@@ -304,6 +408,7 @@ uint16_t ENC28J60_ReceivePacket(ENC28J60_Config *dev, uint8_t *pBuffer, uint16_t
 
     		HAL_GPIO_WritePin(dev->NSS_Port, dev->NSS_Pin, GPIO_PIN_SET);
     		len = 0;
+    		diag_enc_fail_reason = 6;
     		goto release;
     	}
     } else {
@@ -311,6 +416,7 @@ uint16_t ENC28J60_ReceivePacket(ENC28J60_Config *dev, uint8_t *pBuffer, uint16_t
     	if (HAL_SPI_TransmitReceive_DMA(dev->hspi, dummy_tx, pBuffer, len) != HAL_OK) {
     		HAL_GPIO_WritePin(dev->NSS_Port, dev->NSS_Pin, GPIO_PIN_SET);
     		len = 0;
+    		diag_enc_fail_reason = 5;
     		goto release;
     	}
 
@@ -322,6 +428,7 @@ uint16_t ENC28J60_ReceivePacket(ENC28J60_Config *dev, uint8_t *pBuffer, uint16_t
 
     		HAL_GPIO_WritePin(dev->NSS_Port, dev->NSS_Pin, GPIO_PIN_SET);
     		len = 0;
+    		diag_enc_fail_reason = 6;
     		goto release;
     	}
     }

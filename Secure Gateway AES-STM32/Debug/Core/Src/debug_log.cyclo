@@ -1,0 +1,6 @@
+../Core/Src/debug_log.c:43:6:DebugLog_Init	1
+../Core/Src/debug_log.c:54:6:DebugLog_Print	5
+../Core/Src/debug_log.c:84:20:rx_fail_str	9
+../Core/Src/debug_log.c:98:20:tx_fail_str	10
+../Core/Src/debug_log.c:113:13:print_ip	1
+../Core/Src/debug_log.c:120:6:DebugLog_PrintStats	10

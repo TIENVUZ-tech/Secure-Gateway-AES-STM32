@@ -31,7 +31,7 @@ try:
         sock.sendto(packet_data, (TARGET_IP_RASP, TARGET_PORT))
         sent_count += 1
         print(f"\rSent: {seq_header.decode('ascii')} (Total: {len(packet_data)} bytes)", end="")
-        time.sleep(0.02)
+        time.sleep(0.05)
 
 except KeyboardInterrupt:
     print("\n[!] Stopped test by boss.")

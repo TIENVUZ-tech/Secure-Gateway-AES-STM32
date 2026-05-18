@@ -22,9 +22,10 @@ typedef struct {
 } PacketBuffer;
 
 void BufferPool_Init(void);
-
 PacketBuffer* BufferPool_Acquire(void);
-
 void BufferPool_Release(PacketBuffer *buffer);
+uint8_t BufferPool_FreeCount(void);
+
+#define BUFFER_POOL_SIZE BUFFER_COUNT
 
 #endif /* INC_BUFFER_POOL_H_ */

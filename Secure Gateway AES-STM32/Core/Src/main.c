@@ -26,7 +26,9 @@
 #include "buffer_pool.h"
 #include "aes.h"
 #include "string.h"
+#include "stdio.h"
 #include "FreeRTOS.h"
+#include "debug_log.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -47,6 +49,13 @@ const IP_Key_Map key_table[] = {
 #define KEY_TABLE_SIZE (sizeof(key_table)/sizeof(IP_Key_Map))
 
 #define PAYLOAD_MAX_SIZE 512
+#define RX_QUEUE_LENGTH 6
+#define TX_QUEUE_LENGTH 4
+#define RX_BURST_LIMIT 6
+#define ETH_HEADER_LEN 14
+#define ARP_MIN_FRAME_LEN 42
+#define IPV4_MIN_FRAME_LEN 34
+#define PKT_MIN_LEN 60
 
 #define TASK_ALIVE_RX1 (1 << 0)
 #define TASK_ALIVE_RX2 (1 << 1)
@@ -63,7 +72,7 @@ const IP_Key_Map key_table[] = {
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-//IWDG_HandleTypeDef hiwdg;
+IWDG_HandleTypeDef hiwdg;
 
 SPI_HandleTypeDef hspi1;
 SPI_HandleTypeDef hspi2;
@@ -71,6 +80,8 @@ DMA_HandleTypeDef hdma_spi1_rx;
 DMA_HandleTypeDef hdma_spi1_tx;
 DMA_HandleTypeDef hdma_spi2_rx;
 DMA_HandleTypeDef hdma_spi2_tx;
+
+UART_HandleTypeDef huart1;
 
 osThreadId defaultTaskHandle;
 osThreadId vRX_SPI1_TaskHandle;
@@ -96,7 +107,7 @@ uint8_t xRX_QueueBuffer[ 6 * sizeof( uint32_t ) ];
 osStaticMessageQDef_t xRX_QueueControlBlock;
 osMessageQId xTX_SPI1_QueueHandle;
 uint8_t xTX_SPI1_QueueBuffer[ 2 * sizeof( uint32_t ) ];
-osStaticMessageQDef_t xTX_SPI1_QueueControlBlock;
+osStaticMessageQDef_t xTX_QueueControlBlock;
 osMessageQId xTX_SPI2_QueueHandle;
 uint8_t xTX_SPI2_QueueBuffer[ 2 * sizeof( uint32_t ) ];
 osStaticMessageQDef_t xTX_SPI2_QueueControlBlock;
@@ -111,10 +122,39 @@ osSemaphoreId xSem_INT_SPI2;
 osMutexId dev1_mutex;
 osMutexId dev2_mutex;
 osMutexId pool_mutex;
+osMutexId uart_mutex;
 
 // Alive flag
 volatile uint8_t task_alive_flags = 0;
 volatile uint8_t is_init_done = 0;
+
+volatile uint32_t diag_rx1_packets = 0;
+volatile uint32_t diag_rx2_packets = 0;
+volatile uint32_t diag_tx1_packets = 0;
+volatile uint32_t diag_tx2_packets = 0;
+volatile uint32_t diag_arp_packets = 0;
+volatile uint32_t diag_icmp_packets = 0;
+volatile uint32_t diag_drop_packets = 0;
+volatile uint32_t diag_link1_up = 0;
+volatile uint32_t diag_link2_up = 0;
+volatile uint32_t diag_arp_rx1 = 0;
+volatile uint32_t diag_arp_rx2 = 0;
+volatile uint32_t diag_icmp_rx1 = 0;
+volatile uint32_t diag_icmp_rx2 = 0;
+volatile uint32_t diag_arp1_opcode = 0;
+volatile uint32_t diag_arp1_sender_ip = 0;
+volatile uint32_t diag_arp1_target_ip = 0;
+volatile uint32_t diag_arp2_opcode = 0;
+volatile uint32_t diag_arp2_sender_ip = 0;
+volatile uint32_t diag_arp2_target_ip = 0;
+
+extern volatile uint32_t diag_enc_tx_fail_reason;
+extern volatile uint32_t diag_enc_tx_abort;
+extern volatile uint32_t diag_enc_tx_timeout;
+extern volatile uint32_t diag_enc_fail_reason;
+extern volatile uint32_t diag_enc_next_ptr;
+extern volatile uint32_t diag_enc_rx_len;
+extern volatile uint32_t diag_enc_rxstat;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -123,7 +163,8 @@ static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_SPI2_Init(void);
-//static void MX_IWDG_Init(void);
+static void MX_IWDG_Init(void);
+static void MX_USART1_UART_Init(void);
 void StartDefaultTask(void const * argument);
 void vRX_SPI1_TaskFunc(void const * argument);
 void vRX_SPI2_TaskFunc(void const * argument);
@@ -136,6 +177,7 @@ void vTX_SPI2_TaskFunc(void const * argument);
 void RX_HandlePacket(ENC28J60_Config *dev, uint8_t source_dev);
 void Update_Ip_Checksum(PacketBuffer *packet, uint8_t ip_header_length);
 void User_Init(void);
+int _write(int file, char *ptr, int len);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -154,15 +196,20 @@ void RX_HandlePacket(ENC28J60_Config *dev, uint8_t source_spi) {
 	// Request buffer from pool (if the pool is full, skip packet)
 	PacketBuffer *buffer = BufferPool_Acquire();
 	if (buffer == NULL) {
+		diag_drop_packets++;
 		// Read and discard packet from the chip
+		LOG_W("dev%u: buffer pool EMPTY — packet dropped", source_spi);
 		ENC28J60_DropPacket(dev);
 		return;
 	}
 
 	// Read the packet from ENC28J60 to buffer
-	uint16_t length = ENC28J60_ReceivePacket(dev, buffer->data, 598);
+	uint16_t length = ENC28J60_ReceivePacket(dev, buffer->data, BUFFER_SIZE);
 
-	if (length < 60 || length > BUFFER_SIZE) {
+	if (length < PKT_MIN_LEN || length > BUFFER_SIZE) {
+		diag_drop_packets++;
+        LOG_W("dev%u: bad RX length=%u (min=%u max=%u) — dropped",
+              source_spi, length, PKT_MIN_LEN, BUFFER_SIZE);
 		BufferPool_Release(buffer);
 		return;
 	}
@@ -170,12 +217,20 @@ void RX_HandlePacket(ENC28J60_Config *dev, uint8_t source_spi) {
 	// Write metadata into buffer
 	buffer->length = length;
 	buffer->source_spi = source_spi;
+	if (source_spi == 1) {
+		diag_rx1_packets++;
+	} else if (source_spi == 2) {
+		diag_rx2_packets++;
+	}
 
 	// Place the buffer pointer into xRX_Queue
 	if (osMessagePut(xRX_QueueHandle, (uint32_t)buffer, 0) != osOK) {
+		diag_drop_packets++;
+		LOG_W("dev%u: RX queue FULL — packet len=%u dropped", source_spi, length);
 		BufferPool_Release(buffer);
 		return;
 	}
+	LOG_D("dev%u: RX len=%u OK", source_spi, length);
 }
 
 void Update_Ip_Checksum(PacketBuffer *packet, uint8_t ip_header_length) {
@@ -216,15 +271,31 @@ void Update_Ip_Checksum(PacketBuffer *packet, uint8_t ip_header_length) {
 
 void User_Init() {
 	// Initialize ENC28J60 1 and 2
+	LOG_I("ENC28J60 #1 init...");
+	uint8_t attempts = 0;
 	while (ENC28J60_Init(&dev1, mac1_addr) == 0) {
+		attempts++;
+		LOG_W("ENC28J60 #1 init FAIL (attempt %u), retrying...", attempts);
 		osDelay(100);
 	}
+    LOG_I("ENC28J60 #1 init OK (EREVID=%u)", ENC28J60_ReadReg(&dev1, EREVID));
 
+    LOG_I("ENC28J60 #2 init...");
+    attempts = 0;
 	while (ENC28J60_Init(&dev2, mac2_addr) == 0) {
+        attempts++;
+        LOG_W("ENC28J60 #2 init FAIL (attempt %u), retrying...", attempts);
 		osDelay(100);
 	}
+	LOG_I("ENC28J60 #2 init OK (EREVID=%u)", ENC28J60_ReadReg(&dev2, EREVID));
 
 	BufferPool_Init();
+	LOG_I("Buffer pool init OK (%u slots x %u bytes)", BUFFER_POOL_SIZE, BUFFER_SIZE);
+}
+
+int _write(int file, char *ptr, int len) {
+	HAL_UART_Transmit(&huart1, (uint8_t*)ptr, len, HAL_MAX_DELAY);
+	return len;
 }
 /* USER CODE END 0 */
 
@@ -245,7 +316,7 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-
+  DebugLog_Init(&uart_mutex);
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -260,7 +331,8 @@ int main(void)
   MX_DMA_Init();
   MX_SPI1_Init();
   MX_SPI2_Init();
-//  MX_IWDG_Init();
+  MX_IWDG_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -270,10 +342,12 @@ int main(void)
   osMutexDef(dev1_mutex_def);
   osMutexDef(dev2_mutex_def);
   osMutexDef(pool_mutex_def);
+  osMutexDef(uart_mutex_def);
 
   dev1_mutex = osMutexCreate(osMutex(dev1_mutex_def));
   dev2_mutex = osMutexCreate(osMutex(dev2_mutex_def));
   pool_mutex = osMutexCreate(osMutex(pool_mutex_def));
+  uart_mutex = osMutexCreate(osMutex(uart_mutex_def));
   /* USER CODE END RTOS_MUTEX */
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
@@ -298,7 +372,7 @@ int main(void)
   xRX_QueueHandle = osMessageCreate(osMessageQ(xRX_Queue), NULL);
 
   /* definition and creation of xTX_SPI1_Queue */
-  osMessageQStaticDef(xTX_SPI1_Queue, 2, uint32_t, xTX_SPI1_QueueBuffer, &xTX_SPI1_QueueControlBlock);
+  osMessageQStaticDef(xTX_SPI1_Queue, 2, uint32_t, xTX_SPI1_QueueBuffer, &xTX_QueueControlBlock);
   xTX_SPI1_QueueHandle = osMessageCreate(osMessageQ(xTX_SPI1_Queue), NULL);
 
   /* definition and creation of xTX_SPI2_Queue */
@@ -406,28 +480,28 @@ void SystemClock_Config(void)
   * @param None
   * @retval None
   */
-//static void MX_IWDG_Init(void)
-//{
+static void MX_IWDG_Init(void)
+{
+
+  /* USER CODE BEGIN IWDG_Init 0 */
 //
-//  /* USER CODE BEGIN IWDG_Init 0 */
+  /* USER CODE END IWDG_Init 0 */
+
+  /* USER CODE BEGIN IWDG_Init 1 */
 //
-//  /* USER CODE END IWDG_Init 0 */
+  /* USER CODE END IWDG_Init 1 */
+  hiwdg.Instance = IWDG;
+  hiwdg.Init.Prescaler = IWDG_PRESCALER_64;
+  hiwdg.Init.Reload = 1874;
+  if (HAL_IWDG_Init(&hiwdg) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN IWDG_Init 2 */
 //
-//  /* USER CODE BEGIN IWDG_Init 1 */
-//
-//  /* USER CODE END IWDG_Init 1 */
-////  hiwdg.Instance = IWDG;
-//  hiwdg.Init.Prescaler = IWDG_PRESCALER_64;
-//  hiwdg.Init.Reload = 1874;
-//  if (HAL_IWDG_Init(&hiwdg) != HAL_OK)
-//  {
-//    Error_Handler();
-//  }
-//  /* USER CODE BEGIN IWDG_Init 2 */
-//
-//  /* USER CODE END IWDG_Init 2 */
-//
-//}
+  /* USER CODE END IWDG_Init 2 */
+
+}
 
 /**
   * @brief SPI1 Initialization Function
@@ -502,6 +576,39 @@ static void MX_SPI2_Init(void)
   /* USER CODE BEGIN SPI2_Init 2 */
 
   /* USER CODE END SPI2_Init 2 */
+
+}
+
+/**
+  * @brief USART1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART1_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART1_Init 0 */
+
+  /* USER CODE END USART1_Init 0 */
+
+  /* USER CODE BEGIN USART1_Init 1 */
+
+  /* USER CODE END USART1_Init 1 */
+  huart1.Instance = USART1;
+  huart1.Init.BaudRate = 115200;
+  huart1.Init.WordLength = UART_WORDLENGTH_8B;
+  huart1.Init.StopBits = UART_STOPBITS_1;
+  huart1.Init.Parity = UART_PARITY_NONE;
+  huart1.Init.Mode = UART_MODE_TX_RX;
+  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART1_Init 2 */
+
+  /* USER CODE END USART1_Init 2 */
 
 }
 
@@ -647,7 +754,7 @@ void vRX_SPI1_TaskFunc(void const * argument)
 	   */
 	  uint8_t rx_count = 0;
 
-	  while (rx_count < 6) {
+	  while (rx_count < RX_BURST_LIMIT) {
 		  if (osMutexWait(dev1_mutex, 50) == osOK) {
 			  if (ENC28J60_ReadReg(&dev1, EPKTCNT) > 0) {
 				  RX_HandlePacket(&dev1, 1);
@@ -662,7 +769,7 @@ void vRX_SPI1_TaskFunc(void const * argument)
 		  }
 	  }
 
-	  if (rx_count == 6) {
+	  if (rx_count == RX_BURST_LIMIT) {
 	  	  if (osMutexWait(dev1_mutex, 10) == osOK) {
 	  		  if (ENC28J60_ReadReg(&dev1, EPKTCNT) > 0) {
 	  			  osSemaphoreRelease(xSem_INT_SPI1);
@@ -698,7 +805,7 @@ void vRX_SPI2_TaskFunc(void const * argument)
 	  osSemaphoreWait(xSem_INT_SPI2, 50);
 
 	  uint8_t rx_count = 0;
-	  while (rx_count < 6) {
+	  while (rx_count < RX_BURST_LIMIT) {
 		  if (osMutexWait(dev2_mutex, 50) == osOK) {
 			  if (ENC28J60_ReadReg(&dev2, EPKTCNT) > 0) {
 				  RX_HandlePacket(&dev2, 2);
@@ -713,7 +820,7 @@ void vRX_SPI2_TaskFunc(void const * argument)
 		  }
 	  }
 
-	  if (rx_count == 6) {
+	  if (rx_count == RX_BURST_LIMIT) {
 		  if (osMutexWait(dev2_mutex, 10) == osOK) {
 			  if (ENC28J60_ReadReg(&dev2, EPKTCNT) > 0) {
 				  osSemaphoreRelease(xSem_INT_SPI2);
@@ -754,7 +861,12 @@ void vTX_SPI1_TaskFunc(void const * argument)
 		  packet = (PacketBuffer*)event.value.p;
 
 		  if (osMutexWait(dev1_mutex, 50) == osOK) {
-			  ENC28J60_SendPacket(&dev1, packet->data, packet->length);
+			  if (ENC28J60_SendPacket(&dev1, packet->data, packet->length)) {
+				  diag_tx1_packets++;
+			  } else {
+				  diag_drop_packets++;
+				  LOG_E("dev1 TX FAIL len=%u reason=%lu", packet->length, diag_enc_tx_fail_reason);
+			  }
 			  osMutexRelease(dev1_mutex);
 		  }
 		  BufferPool_Release(packet);
@@ -790,31 +902,46 @@ void vPacket_Processing_TaskFunc(void const * argument)
 	  if (event.status == osEventMessage) {
 		  packet = (PacketBuffer*)event.value.p;
 
-		  // Step 1: Parse Ethernet and IP header
+		  // Step 1: Parse Ethernet header
 		  // Read Ethernet type (offset 12-13)
 		  uint16_t ethernet_type = (packet->data[12] << 8) | packet->data[13];
 
-		  // Read Flags and Fragment offset (offset 20-21)
-		  uint16_t flag_offset = (packet->data[20] << 8) | packet->data[21];
-
-		  // Read protocol (offset 23)
-		  uint8_t ip_protocol = packet->data[23];
-
 		  // Forward ARP packets
 		  if (ethernet_type == 0x0806) {
+			  diag_arp_packets++;
 			  if (packet->source_spi == 1) {
-				  if (osMessagePut(xTX_SPI2_QueueHandle, (uint32_t)packet, 10) != osOK) {
+				  diag_arp_rx1++;
+				  diag_arp1_opcode = ((uint32_t)packet->data[20] << 8) | packet->data[21];
+				  diag_arp1_sender_ip = ((uint32_t)packet->data[28] << 24) | ((uint32_t)packet->data[29] << 16) | ((uint32_t)packet->data[30] << 8) | packet->data[31];
+				  diag_arp1_target_ip = ((uint32_t)packet->data[38] << 24) | ((uint32_t)packet->data[39] << 16) | ((uint32_t)packet->data[40] << 8) | packet->data[41];
+			  } else if (packet->source_spi == 2) {
+				  diag_arp_rx2++;
+				  diag_arp2_opcode = ((uint32_t)packet->data[20] << 8) | packet->data[21];
+				  diag_arp2_sender_ip = ((uint32_t)packet->data[28] << 24) | ((uint32_t)packet->data[29] << 16) | ((uint32_t)packet->data[30] << 8) | packet->data[31];
+				  diag_arp2_target_ip = ((uint32_t)packet->data[38] << 24) | ((uint32_t)packet->data[39] << 16) | ((uint32_t)packet->data[40] << 8) | packet->data[41];
+			  }
+			  if (packet->source_spi == 1) {
+				  if (osMessagePut(xTX_SPI2_QueueHandle, (uint32_t)packet, 50) != osOK) {
+					  diag_drop_packets++;
 					  BufferPool_Release(packet);
 				  }
 			  } else if (packet->source_spi == 2) {
-				  if (osMessagePut(xTX_SPI1_QueueHandle, (uint32_t)packet, 10) != osOK) {
+				  if (osMessagePut(xTX_SPI1_QueueHandle, (uint32_t)packet, 50) != osOK) {
+					  diag_drop_packets++;
 					  BufferPool_Release(packet);
 				  }
 			  } else {
+				  diag_drop_packets++;
 				  BufferPool_Release(packet);
 			  }
 			  continue;
 		  } else if (ethernet_type == 0x0800) { // IPv4
+			  // Read Flags and Fragment offset (offset 20-21)
+			  uint16_t flag_offset = (packet->data[20] << 8) | packet->data[21];
+
+			  // Read protocol (offset 23)
+			  uint8_t ip_protocol = packet->data[23];
+
 			  uint16_t real_ip_length = (packet->data[16] << 8) | packet->data[17];
 			  if (14 + real_ip_length < packet->length) {
 				  packet->length = 14 + real_ip_length;
@@ -822,15 +949,24 @@ void vPacket_Processing_TaskFunc(void const * argument)
 
 			  // Accept ICMP packets (ping)
 			  if (ip_protocol == 0x01) {
+				  diag_icmp_packets++;
 				  if (packet->source_spi == 1) {
-					  if (osMessagePut(xTX_SPI2_QueueHandle, (uint32_t)packet, 10) != osOK) {
+					  diag_icmp_rx1++;
+				  } else if (packet->source_spi == 2) {
+					  diag_icmp_rx2++;
+				  }
+				  if (packet->source_spi == 1) {
+					  if (osMessagePut(xTX_SPI2_QueueHandle, (uint32_t)packet, 50) != osOK) {
+						  diag_drop_packets++;
 						  BufferPool_Release(packet);
 					  }
 				  } else if (packet->source_spi == 2) {
-					  if (osMessagePut(xTX_SPI1_QueueHandle, (uint32_t)packet, 10) != osOK) {
+					  if (osMessagePut(xTX_SPI1_QueueHandle, (uint32_t)packet, 50) != osOK) {
+						  diag_drop_packets++;
 						  BufferPool_Release(packet);
 					  }
 				  } else {
+					  diag_drop_packets++;
 					  BufferPool_Release(packet);
 				  }
 				  continue;
@@ -838,10 +974,13 @@ void vPacket_Processing_TaskFunc(void const * argument)
 
 			  // Remove packet if it is not a UDP packet or fragment
 			  if (ip_protocol != 0x11 || (flag_offset & 0x3FFF) != 0) {
+				  diag_drop_packets++;
+				  LOG_D("drop: proto=0x%02X frag=0x%04X src=%u", ip_protocol, flag_offset, packet->source_spi);
 				  BufferPool_Release(packet);
 				  continue;
 			  }
 		  } else {
+			  diag_drop_packets++;
 			  BufferPool_Release(packet);
 			  continue;
 		  }
@@ -852,6 +991,8 @@ void vPacket_Processing_TaskFunc(void const * argument)
 		  uint16_t udp_payload_offset = 14 + ip_header_length + 8;
 
 		  if ((packet->length - udp_payload_offset) > PAYLOAD_MAX_SIZE || udp_payload_offset >= packet->length) {
+			  diag_drop_packets++;
+			  LOG_W("drop: UDP payload oor off=%u len=%u src=%u", udp_payload_offset, packet->length, packet->source_spi);
 			  BufferPool_Release(packet);
 			  continue;
 		  }
@@ -877,6 +1018,9 @@ void vPacket_Processing_TaskFunc(void const * argument)
 		  }
 
 		  if (found_key == NULL || dest_key_found == 0) {
+			  diag_drop_packets++;
+			  LOG_W("drop: key not found src_ip=%u.%u.%u.%u",
+					 source_ip[0], source_ip[1], source_ip[2], source_ip[3]);
 			  BufferPool_Release(packet);
 			  continue;
 		  }
@@ -892,14 +1036,18 @@ void vPacket_Processing_TaskFunc(void const * argument)
 
 		  // Step 5: Put into the xTX_Queue
 		  if (packet->source_spi == 1) {
-			  if (osMessagePut(xTX_SPI2_QueueHandle, (uint32_t)packet, 10) != osOK) {
+			  if (osMessagePut(xTX_SPI2_QueueHandle, (uint32_t)packet, 50) != osOK) {
+				  diag_drop_packets++;
 				  BufferPool_Release(packet);
 			  }
 		  } else if (packet->source_spi == 2) {
-			  if (osMessagePut(xTX_SPI1_QueueHandle, (uint32_t)packet, 10) != osOK) {
+			  if (osMessagePut(xTX_SPI1_QueueHandle, (uint32_t)packet, 50) != osOK) {
+				  diag_drop_packets++;
 				  BufferPool_Release(packet);
 			  }
 		  } else {
+			  diag_drop_packets++;
+			  LOG_W("drop: TX%u queue full len=%u", (packet->source_spi==1)?2:1, packet->length);
 			  BufferPool_Release(packet);
 		  }
 	  }
@@ -919,10 +1067,13 @@ void vHeartbeat_TaskFunc(void const * argument)
   /* USER CODE BEGIN vHeartbeat_TaskFunc */
 	// HAL_IWDG_Refresh(&hiwdg);
 	User_Init();
+	LOG_I("Init complete — starting all tasks");
 //	MX_IWDG_Init();
 //	HAL_IWDG_Refresh(&hiwdg);
 
 	is_init_done = 1;
+    static uint8_t prev_link1 = 0xFF, prev_link2 = 0xFF;
+    static uint32_t stats_tick = 0;
   /* Infinite loop */
   for(;;)
   {
@@ -937,40 +1088,63 @@ void vHeartbeat_TaskFunc(void const * argument)
 	  // Blink heart led (PC13)
 	  HAL_GPIO_TogglePin(HEART_BEAT_GPIO_Port, HEART_BEAT_Pin);
 
-	  // Monitor the Link status of Module 1 (SPI1)
-	  if (osMutexWait(dev1_mutex, 50) == osOK) {
-		  uint16_t phstat1_1 = ENC28J60_ReadPhy(&dev1, PHSTAT1);
-		  if (!(phstat1_1 & PHSTAT1_LLSTAT)) { // Link down
-			  link_down_count_dev1++;
-			  if (link_down_count_dev1 >= 8) { // Link down 4s
-				  if (ENC28J60_Init(&dev1, mac1_addr) == 1) {
-//	      	     	  HAL_IWDG_Refresh(&hiwdg);
-			          link_down_count_dev1 = 0;
-				  }
-			  }
-		  } else {
-			  link_down_count_dev1 = 0; // Link up
-		  }
-		  osMutexRelease(dev1_mutex);
-	  }
+	  // Monitor the current link status of Module 1 (SPI1)
+      if (osMutexWait(dev1_mutex, 50) == osOK) {
+          uint16_t phstat2_1 = ENC28J60_ReadPhy(&dev1, PHSTAT2);
+          uint8_t  link1_now = (phstat2_1 & PHSTAT2_LSTAT) ? 1 : 0;
+          if (link1_now != prev_link1) {
+              LOG_I("dev1 LINK %s", link1_now ? "UP" : "DOWN");
+              prev_link1 = link1_now;
+          }
+          diag_link1_up = link1_now;
+          if (!link1_now) {
+              link_down_count_dev1++;
+              if (link_down_count_dev1 >= 8) {
+                  LOG_W("dev1 link down 4s — reinitializing...");
+                  if (ENC28J60_Init(&dev1, mac1_addr) == 1) {
+                      LOG_I("dev1 reinit OK");
+                      link_down_count_dev1 = 0;
+                  } else {
+                      LOG_E("dev1 reinit FAIL");
+                  }
+              }
+          } else {
+              link_down_count_dev1 = 0;
+          }
+          osMutexRelease(dev1_mutex);
+      }
 
 
-	  // Monitor the Link status of Module 2 (SPI2)
-	  if (osMutexWait(dev2_mutex, 50) == osOK) {
-		  uint16_t phstat1_2 = ENC28J60_ReadPhy(&dev2, PHSTAT1);
-		  if (!(phstat1_2 & PHSTAT1_LLSTAT)) { // Link down
-			  link_down_count_dev2++;
-			  if (link_down_count_dev2 >= 8) {
-				  if (ENC28J60_Init(&dev2, mac2_addr) == 1) {
-//	   		         HAL_IWDG_Refresh(&hiwdg);
-			         link_down_count_dev2 = 0;
-				  }
-			  }
-		  } else {
-			  link_down_count_dev2 = 0;
-		  }
-		  osMutexRelease(dev2_mutex);
-	  }
+	  // Monitor the current link status of Module 2 (SPI2)
+      if (osMutexWait(dev2_mutex, 50) == osOK) {
+          uint16_t phstat2_2 = ENC28J60_ReadPhy(&dev2, PHSTAT2);
+          uint8_t  link2_now = (phstat2_2 & PHSTAT2_LSTAT) ? 1 : 0;
+          if (link2_now != prev_link2) {
+              LOG_I("dev2 LINK %s", link2_now ? "UP" : "DOWN");
+              prev_link2 = link2_now;
+          }
+          diag_link2_up = link2_now;
+          if (!link2_now) {
+              link_down_count_dev2++;
+              if (link_down_count_dev2 >= 8) {
+                  LOG_W("dev2 link down 4s — reinitializing...");
+                  if (ENC28J60_Init(&dev2, mac2_addr) == 1) {
+                      LOG_I("dev2 reinit OK");
+                      link_down_count_dev2 = 0;
+                  } else {
+                      LOG_E("dev2 reinit FAIL");
+                  }
+              }
+          } else {
+              link_down_count_dev2 = 0;
+          }
+          osMutexRelease(dev2_mutex);
+      }
+
+      if (HAL_GetTick() - stats_tick >= 5000) {
+          stats_tick = HAL_GetTick();
+          DebugLog_PrintStats();
+      }
 
     osDelay(500);
   }
@@ -1004,7 +1178,12 @@ void vTX_SPI2_TaskFunc(void const * argument)
 		  packet = (PacketBuffer*)event.value.p;
 
 		  if (osMutexWait(dev2_mutex, 50) == osOK) {
-			  ENC28J60_SendPacket(&dev2, packet->data, packet->length);
+			  if (ENC28J60_SendPacket(&dev2, packet->data, packet->length)) {
+				  diag_tx2_packets++;
+			  } else {
+				  diag_drop_packets++;
+				  LOG_E("dev1 TX FAIL len=%u reason=%lu", packet->length, diag_enc_tx_fail_reason);
+			  }
 			  osMutexRelease(dev2_mutex);
 		  }
 		  BufferPool_Release(packet);

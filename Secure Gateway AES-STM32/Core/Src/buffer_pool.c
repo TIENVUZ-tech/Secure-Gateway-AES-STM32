@@ -44,3 +44,14 @@ void BufferPool_Release(PacketBuffer* buffer) {
 		osMutexRelease(pool_mutex);
 	}
 }
+
+uint8_t BufferPool_FreeCount(void) {
+	uint8_t count = 0;
+	if (osMutexWait(pool_mutex, 5) == osOK) {
+		for (int i = 0; i < BUFFER_COUNT; i++) {
+			if (pool_status[i] == BUFFER_FREE) count++;
+		}
+		osMutexRelease(pool_mutex);
+	}
+	return count;
+}

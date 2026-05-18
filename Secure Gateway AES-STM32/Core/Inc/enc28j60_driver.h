@@ -48,9 +48,12 @@
 // Bank 2 (MAC/MII — bit 7 = need dummy byte)
 #define MACON1   (0x00|0x40|0x80)
 #define MACON3   (0x02|0x40|0x80)
+#define MACON4   (0x03|0x40|0x80)
 #define MABBIPG  (0x04|0x40|0x80)
 #define MAIPGL   (0x06|0x40|0x80)
 #define MAIPGH   (0x07|0x40|0x80)
+#define MACLCON1 (0x08|0x40|0x80)
+#define MACLCON2 (0x09|0x40|0x80)
 #define MAMXFLL  (0x0A|0x40|0x80)
 #define MAMXFLH  (0x0B|0x40|0x80)
 #define MICMD    (0x12|0x40|0x80)
@@ -115,6 +118,9 @@
 #define MACON3_FRMLNEN  0x02
 #define MACON3_FULDPX   0x01
 
+// MACON4 bits
+#define MACON4_DEFER    0x40
+
 // MISTAT bits
 #define MISTAT_BUSY     0x01
 
@@ -131,13 +137,14 @@
 // PHY bits
 #define PHCON1_PDPXMD   0x0100   // Full duplex
 #define PHCON2_HDLDIS   0x0100   // Disable loopback
-#define PHSTAT1_LLSTAT  0x0004   // Link status (used for Heartbeat task)
+#define PHSTAT1_LLSTAT  0x0004   // Latched link status
+#define PHSTAT2_LSTAT   0x0400   // Current link status
 
 // Memory map
 #define RX_START        0x0000
 #define RX_END          0x19FF   // 6.5KB RX buffer
 #define TX_START        0x1A00   // TX buffer
-#define MAX_FRAME_LEN   598      // 512 payload + 86 header
+#define MAX_FRAME_LEN   598   // Full Ethernet frame without preamble/SFD
 
 // extern Semaphore
 extern osSemaphoreId xSem_DMA_SPI1_Done;
